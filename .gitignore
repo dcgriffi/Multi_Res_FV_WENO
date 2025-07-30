@@ -1,0 +1,13 @@
+# === MATLAB ===
+*.asv
+*.mlx~
+*.fig~
+*.mat~
+*.mdl~
+*.slx~
+*.autosave
+
+*.jpeg
+*.jpg
+*.png
+
