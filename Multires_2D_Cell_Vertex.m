@@ -144,9 +144,24 @@ end
 
           %Precompute quad points
 
+          edge_quad = NaN(4,2,ed2d);
+          for e = 1:ed2d
+            v1 = edges(1,e); v2 = edges(2,e);
 
+            %Compute results for interior points (where two triangles adjacent) 
+            %Alternatively can run until edge_in
 
-
+            if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
+                cross_info = edge_cross_dxdy(:,e);
+     
+                midpoint = [(xcoord(v1) + xcoord(v2))/2, (ycoord(v1) + ycoord(v2))/2]; %Compute midpoint
+        
+                for side = 1:2
+                    cross_vec = cross_info((2*side - 1): 2*side)';                
+                    edge_quad((2*side - 1): 2*side,1,e) = midpoint + cross_vec*(3 - sqrt(3))/6; edge_quad((2*side - 1): 2*side,2,e) = midpoint + cross_vec*(3 + sqrt(3))/6;            
+                end
+            end
+          end
 
          u = cell_avg; %(Note: cell_avg = NxN - Only update (N-4xN-4),(N-2xN-2) with periodic boundary
 
@@ -164,13 +179,13 @@ end
             end
     
             %RK3
-            u_1 = u + dt*L(u,n_steps, N_x, N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach);
+            u_1 = u + dt*L(u,n_steps, N_x, N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
             u_1 = apply_bc(u_1,N_x,N_y);
 
-            u_2 = 3/4*u +1/4*u_1 + 1/4*dt*L(u_1,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach);
+            u_2 = 3/4*u +1/4*u_1 + 1/4*dt*L(u_1,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
             u_2 = apply_bc(u_2,N_x,N_y);
 
-            u_next = 1/3*u + 2/3*u_2 + 2/3*dt*L(u_2,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach);
+            u_next = 1/3*u + 2/3*u_2 + 2/3*dt*L(u_2,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
             u_next = apply_bc(u_next,N_x,N_y);
     
             u = u_next;
@@ -451,11 +466,11 @@ function B = cell_vertex_smoothness_matrix(W,i, nod_in_e2d,tri,xcoord,ycoord,are
 
 end
 
-function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach)
+function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad)
     %quad_res = weno_reconstruction(W,sten_array,coord_array,quad_vals,v_vec,N); 
     %flux_array = find_fluxes(quad_res,sten_array,N,f,g,a);
 
-    inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach);
+    inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad);
 
     u_hold = NaN(1,N_x*N_y);
     for ii = 1:n_steps
@@ -470,12 +485,12 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
 end
 
 
-function inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach)
+function inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad)
 
 inner_sum = zeros(12,N_x*N_y);
 counter = ones(1,N_x*N_y); %Tracks which index to fill flux on edge
 
-%For LS reconstruction, store coefficients for all i 
+%For LS reconstruction, store coefficients and weights for all i 
 P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach);
 
 u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
@@ -485,8 +500,8 @@ u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,
     %u_cell = @(x,y,i) u(i);
 
 
-d = @(v1,v2) sqrt((v1(1) - v2(1))^2 + (v1(2) - v2(2))^2);
-T = @(s,a,b) a*(1 - s)/2+ b*(1 + s)/2; %Transform from reference segment
+%d = @(v1,v2) sqrt((v1(1) - v2(1))^2 + (v1(2) - v2(2))^2);
+%T = @(s,a,b) a*(1 - s)/2+ b*(1 + s)/2; %Transform from reference segment
 
 for e = 1:ed2d
     v1 = edges(1,e); v2 = edges(2,e);
@@ -496,8 +511,7 @@ for e = 1:ed2d
 
     if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
         cross_info = edge_cross_dxdy(:,e);
-        quad_points = NaN(2,2);
-        midpoint = [(xcoord(v1) + xcoord(v2))/2, (ycoord(v1) + ycoord(v2))/2];%Compute midpoint
+       % midpoint = [(xcoord(v1) + xcoord(v2))/2, (ycoord(v1) + ycoord(v2))/2]; %Compute midpoint
 
 
         for side = 1:2
@@ -506,8 +520,8 @@ for e = 1:ed2d
             %centroid = midpoint + cross_vec;
 
             %Get 2 quad points
-           % quad_points(:,1) = T(-1/sqrt(3),midpoint,centroid); quad_points(:,2) = T(1/sqrt(3),midpoint,centroid);
-            quad_points(:,1) = midpoint + cross_vec*(3 - sqrt(3))/6; quad_points(:,2) = midpoint + cross_vec*(3 + sqrt(3))/6;
+            %quad_points(:,1) = T(-1/sqrt(3),midpoint,centroid); quad_points(:,2) = T(1/sqrt(3),midpoint,centroid);
+            quad_points = edge_quad((2*side - 1):2*side,:,e);
 
             %Get edge length
             %edge_len = norm(cross_vec);
