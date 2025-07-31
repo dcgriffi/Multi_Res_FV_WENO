@@ -499,10 +499,6 @@ u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,
     %u_cell = @(x,y,i) P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2;
     %u_cell = @(x,y,i) u(i);
 
-
-%d = @(v1,v2) sqrt((v1(1) - v2(1))^2 + (v1(2) - v2(2))^2);
-%T = @(s,a,b) a*(1 - s)/2+ b*(1 + s)/2; %Transform from reference segment
-
 for e = 1:ed2d
     v1 = edges(1,e); v2 = edges(2,e);
 
@@ -511,29 +507,17 @@ for e = 1:ed2d
 
     if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
         cross_info = edge_cross_dxdy(:,e);
-       % midpoint = [(xcoord(v1) + xcoord(v2))/2, (ycoord(v1) + ycoord(v2))/2]; %Compute midpoint
-
 
         for side = 1:2
             cross_vec = cross_info((2*side - 1): 2*side)';
-
-            %centroid = midpoint + cross_vec;
-
-            %Get 2 quad points
-            %quad_points(:,1) = T(-1/sqrt(3),midpoint,centroid); quad_points(:,2) = T(1/sqrt(3),midpoint,centroid);
             quad_points = edge_quad((2*side - 1):2*side,:,e);
-
-            %Get edge length
-            %edge_len = norm(cross_vec);
 
             %Get outward facing normal vector to side edge
             %   Rotate 90 degrees/-90 degrees
             if side == 1
-                 %n_vec = [cross_vec(2); -cross_vec(1)]/edge_len;
                  n_vec = [cross_vec(2); -cross_vec(1)];
 
             else 
-                 %n_vec = [-cross_vec(2); cross_vec(1)]/edge_len;
                  n_vec = [-cross_vec(2); cross_vec(1)];
 
             end
@@ -547,10 +531,6 @@ for e = 1:ed2d
                 fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
                 fv_2(q) = -fv_1(q);
             end
-            % inner_sum(counter(v1),v1) = edge_len*(1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
-            % inner_sum(counter(v2),v2) = edge_len*(1/2*(fv_2(1) + fv_2(2))); %weights = 1/2,
-                    %Removing edge_len should work as long as a also in normal
-                    %direction (dotted with normal vec)
 
             inner_sum(counter(v1),v1) = (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
             inner_sum(counter(v2),v2) = (1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
