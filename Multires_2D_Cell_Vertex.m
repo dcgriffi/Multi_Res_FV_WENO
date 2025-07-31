@@ -467,66 +467,49 @@ end
 function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad)
     %quad_res = weno_reconstruction(W,sten_array,coord_array,quad_vals,v_vec,N); 
     %flux_array = find_fluxes(quad_res,sten_array,N,f,g,a);
+    
+    inner_sum = zeros(1,N_x*N_y);
 
-    inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad);
-
-
-    % 
-    % u_hold = NaN(1,N_x*N_y);
-    % for ii = 1:n_steps
-    %     i = ind_vec(ii);
-    %     area_i = area(i);
-    %     u_hold(i) = -(1/area_i)*inner_sum(i);
-    % end
-
-    u_hold = -inner_sum./(4*area);
-end
-
-
-function inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad)
-
-inner_sum = zeros(1,N_x*N_y);
-
-%For LS reconstruction, store coefficients and weights for all i 
-P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach);
-
-u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
-
-%Uncomment to test fully quadratic or linear
-    %u_cell = @(x,y,i) P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2;
-    %u_cell = @(x,y,i) u(i);
-
-for e = 1:ed2d
-    v1 = edges(1,e); v2 = edges(2,e);
-
-    %Compute results for interior points (where two triangles adjacent) 
-        %Alternatively can run until edge_in
-
-    if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
-        cross_info = edge_cross_dxdy(:,e);
-
-        for side = 1:2
-            cross_vec = cross_info((2*side - 1): 2*side)';
-            quad_points = edge_quad((2*side - 1):2*side,:,e);
-
-            %Get outward facing normal vector to side edge
-            %   Rotate 90 degrees/-90 degrees
-            if side == 1
-                 n_vec = [cross_vec(2); -cross_vec(1)];
-
-            else 
-                 n_vec = [-cross_vec(2); cross_vec(1)];
-
-            end
-
-            %Vectorize computation with quad points
-             
+    %For LS reconstruction, store coefficients and weights for all i 
+    P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach);
+    
+    u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
+    
+    %Uncomment to test fully quadratic or linear
+        %u_cell = @(x,y,i) P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2;
+        %u_cell = @(x,y,i) u(i);
+    
+    for e = 1:ed2d
+        v1 = edges(1,e); v2 = edges(2,e);
+    
+        %Compute results for interior points (where two triangles adjacent) 
+            %Alternatively can run until edge_in
+    
+        if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
+            cross_info = edge_cross_dxdy(:,e);
+    
+            for side = 1:2
+                cross_vec = cross_info((2*side - 1): 2*side)';
+                quad_points = edge_quad((2*side - 1):2*side,:,e);
+    
+                %Get outward facing normal vector to side edge
+                %   Rotate 90 degrees/-90 degrees
+                if side == 1
+                     n_vec = [cross_vec(2); -cross_vec(1)];
+    
+                else 
+                     n_vec = [-cross_vec(2); cross_vec(1)];
+    
+                end
+    
+                %Vectorized computation with quad points
+                 
                 %Use LS/multi-res for scalar reconstruction from either cell
                 uq_m = u_cell(quad_points(1,:),quad_points(2,:),v1);
                 uq_p = u_cell(quad_points(1,:),quad_points(2,:),v2);
             
                 %fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
-
+    
                 %LF
                     %burgers:
                     a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
@@ -539,15 +522,24 @@ for e = 1:ed2d
                     fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
                     fv_2 = -fv_1;
           
-
-            inner_sum(v1) = inner_sum(v1) + sum(fv_1); %Summing over quad points for edge
-            inner_sum(v2) = inner_sum(v2) + sum(fv_2); %weights = 1/2
+    
+                inner_sum(v1) = inner_sum(v1) + sum(fv_1); %Summing over quad points for edge
+                inner_sum(v2) = inner_sum(v2) + sum(fv_2); %weights = 1/2
+             end
          end
-     end
-   
-end
-end
+       
+    end
 
+    % 
+    % u_hold = NaN(1,N_x*N_y);
+    % for ii = 1:n_steps
+    %     i = ind_vec(ii);
+    %     area_i = area(i);
+    %     u_hold(i) = -(1/area_i)*inner_sum(i);
+    % end
+
+    u_hold = -inner_sum./(4*area);
+end
 
 
 function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach)
