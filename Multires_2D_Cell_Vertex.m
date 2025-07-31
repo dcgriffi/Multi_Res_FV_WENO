@@ -110,21 +110,19 @@ end
 
          [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d, edge_tri,elem_edges,edge_cross_dxdy] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d);
 
+          % area_in = reshape(area, N_y,N_x);
+          % area_in = area_in(4:end - 3, 4:end - 3);
+          % area_in = reshape(area_in, 1,(N_y-6)*(N_x-6));
+
+
          [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_arrays(N_x,N_y);
 
          nghbr_n2d = order_neighbor(nghbr_n2d,nod_in_e2d, edges,edge_tri,tri,elem_edges,inner_v_vec_2, inner_steps);
 
          cell_avg = build_cell_avg_vec(inner_v_vec, u_initial, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-         %boundary_check = apply_bc(cell_avg,N);
 
          cell_avg_array = reshape(cell_avg, N_y, N_x);
-         %boundary_check_array = reshape(boundary_check, N, N);
-        
-        % v_array = cell_avg_array(3:end - 2, 3:end - 2);
-        % v_vec = reshape(v_array, N-4,N-4); %This is what I would actually want to plot and update in time stepping
 
-
-      
         %Third order approximation
          k = 6; m = 7;
         
@@ -472,23 +470,22 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
 
     inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad);
 
-    u_hold = NaN(1,N_x*N_y);
-    for ii = 1:n_steps
-        i = ind_vec(ii);
-        sum =0;
-        for e = 1:12
-            sum = sum + inner_sum(e,i);
-        end
-        area_i = area(i);
-        u_hold(i) = -(1/area_i)*sum;
-    end
+
+    % 
+    % u_hold = NaN(1,N_x*N_y);
+    % for ii = 1:n_steps
+    %     i = ind_vec(ii);
+    %     area_i = area(i);
+    %     u_hold(i) = -(1/area_i)*inner_sum(i);
+    % end
+
+    u_hold = -inner_sum./area;
 end
 
 
 function inner_sum = find_inner_sum(u,W,ed2d,xcoord,ycoord,edges,edge_tri,tri,f,g,N_x,N_y,nghbr_n2d,inner_v_vec_2,inner_steps,B,area,a,edge_cross_dxdy,eps,approach,edge_quad)
 
-inner_sum = zeros(12,N_x*N_y);
-counter = ones(1,N_x*N_y); %Tracks which index to fill flux on edge
+inner_sum = zeros(1,N_x*N_y);
 
 %For LS reconstruction, store coefficients and weights for all i 
 P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach);
@@ -545,10 +542,8 @@ for e = 1:ed2d
                     fv_2(q) = -fv_1(q);
             end
 
-            inner_sum(counter(v1),v1) = (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
-            inner_sum(counter(v2),v2) = (1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
-            counter(v1) = counter(v1) + 1;
-            counter(v2) = counter(v2) + 1;
+            inner_sum(v1) = inner_sum(v1) + (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
+            inner_sum(v2) = inner_sum(v2) + (1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
          end
      end
    
