@@ -51,7 +51,7 @@ approach = "standard";
 %approach = "dir_deriv_sten_2";
 
 pde = "burgers";
-%pde = "linear";
+pde = "linear";
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
@@ -528,8 +528,21 @@ for e = 1:ed2d
                 uq_1 = u_cell(quad_points(1,q),quad_points(2,q),v1);
                 uq_2 = u_cell(quad_points(1,q),quad_points(2,q),v2);
             
-                fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
-                fv_2(q) = -fv_1(q);
+                %fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
+
+                %LF
+                 %burgers:
+                    a = max(abs(uq_1*(n_vec(1) + n_vec(2))), abs(uq_2*(n_vec(1) + n_vec(2))));
+                    %a = max(abs(u_m), abs(u_p));
+                
+                    %linear:
+                    %a=1;
+                    a = abs(n_vec(1) + n_vec(2)); %Other option for linear
+                
+                    F_m = [f(uq_1); g(uq_1)];
+                    F_p = [f(uq_2); g(uq_2)];
+                    fv_1(q) = (1/2)*(dot((F_m + F_p),n_vec) - a*(uq_2-uq_1));
+                    fv_2(q) = -fv_1(q);
             end
 
             inner_sum(counter(v1),v1) = (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
