@@ -50,8 +50,8 @@ approach = "standard";
 %approach = "dir_deriv_sten_2";
 %approach = "dir_deriv_sten_2";
 
-%pde = "burgers";
-pde = "linear";
+pde = "burgers";
+%pde = "linear";
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
@@ -128,11 +128,6 @@ end
         %Third order approximation
          k = 6; m = 7;
         
-         % W = zeros(k, m+1, n_steps);
-         % for ii = 1:n_steps
-         %   i = ind_vec(ii);
-         %   W(:,:,ii) = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
-         % end
 
           W = NaN(k, m+1, N_x*N_y);
           for ii = 1:inner_steps
@@ -146,6 +141,12 @@ end
             i = inner_v_vec_2(ii);
              B(:,:,i) = cell_vertex_smoothness_matrix(squeeze(W(:,:,i)),i,nod_in_e2d,tri,xcoord,ycoord,area);
           end
+
+          %Precompute quad points
+
+
+
+
 
          u = cell_avg; %(Note: cell_avg = NxN - Only update (N-4xN-4),(N-2xN-2) with periodic boundary
 
@@ -500,24 +501,27 @@ for e = 1:ed2d
 
 
         for side = 1:2
-            %Compute centroid
-
             cross_vec = cross_info((2*side - 1): 2*side)';
 
-            centroid = midpoint + cross_vec;
+            %centroid = midpoint + cross_vec;
 
             %Get 2 quad points
-            quad_points(:,1) = T(-1/sqrt(3),midpoint,centroid); quad_points(:,2) = T(1/sqrt(3),midpoint,centroid);
-            
+           % quad_points(:,1) = T(-1/sqrt(3),midpoint,centroid); quad_points(:,2) = T(1/sqrt(3),midpoint,centroid);
+            quad_points(:,1) = midpoint + cross_vec*(3 - sqrt(3))/6; quad_points(:,2) = midpoint + cross_vec*(3 + sqrt(3))/6;
+
             %Get edge length
-            edge_len = norm(cross_vec);
+            %edge_len = norm(cross_vec);
 
             %Get outward facing normal vector to side edge
             %   Rotate 90 degrees/-90 degrees
             if side == 1
-                 n_vec = [cross_vec(2); -cross_vec(1)]/edge_len;
+                 %n_vec = [cross_vec(2); -cross_vec(1)]/edge_len;
+                 n_vec = [cross_vec(2); -cross_vec(1)];
+
             else 
-                 n_vec = [-cross_vec(2); cross_vec(1)]/edge_len;
+                 %n_vec = [-cross_vec(2); cross_vec(1)]/edge_len;
+                 n_vec = [-cross_vec(2); cross_vec(1)];
+
             end
             
             fv_1 = NaN(2,1); fv_2 = NaN(2,1);
@@ -529,8 +533,13 @@ for e = 1:ed2d
                 fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
                 fv_2(q) = -fv_1(q);
             end
-            inner_sum(counter(v1),v1) = edge_len*(1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
-            inner_sum(counter(v2),v2) = edge_len*(1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
+            % inner_sum(counter(v1),v1) = edge_len*(1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
+            % inner_sum(counter(v2),v2) = edge_len*(1/2*(fv_2(1) + fv_2(2))); %weights = 1/2,
+                    %Removing edge_len should work as long as a also in normal
+                    %direction (dotted with normal vec)
+
+            inner_sum(counter(v1),v1) = (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
+            inner_sum(counter(v2),v2) = (1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
             counter(v1) = counter(v1) + 1;
             counter(v2) = counter(v2) + 1;
          end
