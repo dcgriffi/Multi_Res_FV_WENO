@@ -479,7 +479,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
     %     u_hold(i) = -(1/area_i)*inner_sum(i);
     % end
 
-    u_hold = -inner_sum./area;
+    u_hold = -inner_sum./(4*area);
 end
 
 
@@ -518,32 +518,30 @@ for e = 1:ed2d
                  n_vec = [-cross_vec(2); cross_vec(1)];
 
             end
-            
-            fv_1 = NaN(2,1); fv_2 = NaN(2,1);
-            for q = 1:2
+
+            %Vectorize computation with quad points
+             
                 %Use LS/multi-res for scalar reconstruction from either cell
-                uq_1 = u_cell(quad_points(1,q),quad_points(2,q),v1);
-                uq_2 = u_cell(quad_points(1,q),quad_points(2,q),v2);
+                uq_m = u_cell(quad_points(1,:),quad_points(2,:),v1);
+                uq_p = u_cell(quad_points(1,:),quad_points(2,:),v2);
             
                 %fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
 
                 %LF
-                 %burgers:
-                    a = max(abs(uq_1*(n_vec(1) + n_vec(2))), abs(uq_2*(n_vec(1) + n_vec(2))));
-                    %a = max(abs(u_m), abs(u_p));
+                    %burgers:
+                    a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
                 
                     %linear:
-                    %a=1;
-                    a = abs(n_vec(1) + n_vec(2)); %Other option for linear
+                    a = ones(1,2)*abs(n_vec(1) + n_vec(2));
                 
-                    F_m = [f(uq_1); g(uq_1)];
-                    F_p = [f(uq_2); g(uq_2)];
-                    fv_1(q) = (1/2)*(dot((F_m + F_p),n_vec) - a*(uq_2-uq_1));
-                    fv_2(q) = -fv_1(q);
-            end
+                    F_m = [f(uq_m); g(uq_m)]; %2x2
+                    F_p = [f(uq_p); g(uq_p)]; %2x2
+                    fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
+                    fv_2 = -fv_1;
+          
 
-            inner_sum(v1) = inner_sum(v1) + (1/2*(fv_1(1) + fv_1(2))); %Summing over quad points for edge
-            inner_sum(v2) = inner_sum(v2) + (1/2*(fv_2(1) + fv_2(2))); %weights = 1/2
+            inner_sum(v1) = inner_sum(v1) + sum(fv_1); %Summing over quad points for edge
+            inner_sum(v2) = inner_sum(v2) + sum(fv_2); %weights = 1/2
          end
      end
    
