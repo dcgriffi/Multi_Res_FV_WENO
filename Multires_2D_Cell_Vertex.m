@@ -34,24 +34,24 @@ clear all; close all;
 
 tic
 %Uncomment the desired time
-%t_final = 2/2; %After shock
+t_final = 2/2; %After shock
 
-t_final = 0.3/2; 
-eps = 1e-4;
+%t_final = 0.3/2; 
+eps = 1e-5;
 %t_final = 1e-2;
-avoid_shock = false;
+avoid_shock = true;
 
 p = 3;
 
 
 approach = "standard";
 %approach = "beta_1_0";
+%approach = "single_beta_ls"; 
 %approach = "dir_deriv_sten_1";
-%approach = "dir_deriv_sten_2";
 %approach = "dir_deriv_sten_2";
 
 pde = "burgers";
-pde = "linear";
+%pde = "linear";
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
@@ -133,11 +133,16 @@ end
             W(:,:,i) = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
-
           B = NaN(m+1, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
              B(:,:,i) = cell_vertex_smoothness_matrix(squeeze(W(:,:,i)),i,nod_in_e2d,tri,xcoord,ycoord,area);
+          end
+
+          L1 = NaN(m+1, m+1, N_x*N_y);
+          for ii = 1:inner_steps
+            i = inner_v_vec_2(ii);
+             L1(:,:,i) = lin_cell_vertex_smoothness_matrix(squeeze(W(:,:,i)),i,nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
           %Precompute quad points
@@ -177,13 +182,13 @@ end
             end
     
             %RK3
-            u_1 = u + dt*L(u,n_steps, N_x, N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
+            u_1 = u + dt*L(u,n_steps, N_x, N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad,L1,pde);
             u_1 = apply_bc(u_1,N_x,N_y);
 
-            u_2 = 3/4*u +1/4*u_1 + 1/4*dt*L(u_1,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
+            u_2 = 3/4*u +1/4*u_1 + 1/4*dt*L(u_1,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad,L1,pde);
             u_2 = apply_bc(u_2,N_x,N_y);
 
-            u_next = 1/3*u + 2/3*u_2 + 2/3*dt*L(u_2,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad);
+            u_next = 1/3*u + 2/3*u_2 + 2/3*dt*L(u_2,n_steps, N_x,  N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad,L1,pde);
             u_next = apply_bc(u_next,N_x,N_y);
     
             u = u_next;
@@ -207,9 +212,6 @@ end
         fig_num = fig_num+1; variable_name = "sin(x+y)"; 
         Method = "Least Squares Poly Approx"; 
 
-   
-     
-
         if n_x == n_set_array(end)
              %Plot exact cell averages
              exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
@@ -223,8 +225,6 @@ end
              %fig_num = fig_num + 1;
              view([-1, 1, 0]);
             % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
-
-
 
              %Plot approx cell averages
              fig_num = 5;
@@ -464,14 +464,24 @@ function B = cell_vertex_smoothness_matrix(W,i, nod_in_e2d,tri,xcoord,ycoord,are
 
 end
 
-function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad)
+function L1 = lin_cell_vertex_smoothness_matrix(W,i, nod_in_e2d,tri,xcoord,ycoord,area)
+   
+    W2 = W(2,:); W3 = W(3,:); 
+
+    area_i = area(i);
+
+    L1 = ((W2')*W2 + (W3')*W3)*area_i;
+end
+
+
+function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad,L1,pde)
     %quad_res = weno_reconstruction(W,sten_array,coord_array,quad_vals,v_vec,N); 
     %flux_array = find_fluxes(quad_res,sten_array,N,f,g,a);
-    
+
     inner_sum = zeros(1,N_x*N_y);
 
     %For LS reconstruction, store coefficients and weights for all i 
-    P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach);
+    P = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach,L1);
     
     u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
     
@@ -512,11 +522,12 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
     
                 %LF
                     %burgers:
+                    if pde == "burgers"
                     a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
-                
-                    %linear:
+                    elseif pde == "linear"
                     a = ones(1,2)*abs(n_vec(1) + n_vec(2));
-                
+                    end
+
                     F_m = [f(uq_m); g(uq_m)]; %2x2
                     F_p = [f(uq_p); g(uq_p)]; %2x2
                     fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
@@ -542,7 +553,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
 end
 
 
-function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach)
+function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_steps,B,xcoord,ycoord,area,eps,approach,L1)
       
       %Computing polynomial weights and coefficients for reconstuction in
       %all cells as indexed by inner_v_vec_2
@@ -585,7 +596,7 @@ function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_step
         stencil_3 = [1,7,2];
         end
 
-        if approach ~= "beta_1_0"
+        if approach ~= "beta_1_0" && approach ~= "single_beta_ls"
 
         [C2_1, C3_1, b1_1] = compute_lin_smooth(i,stencil_1,u,nghbr_n2d,xcoord,ycoord,area_i,approach);
         [C2_2, C3_2, b1_2] = compute_lin_smooth(i,stencil_2,u,nghbr_n2d,xcoord,ycoord,area_i,approach);
@@ -610,8 +621,10 @@ function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_step
              %beta_1 = min([b1_1,b1_2,b1_3]); 
 
 
-        else
+        elseif approach == "beta_1_0"
             beta_1 = 0;
+        elseif approach == "single_beta_ls"
+            beta_1 = d'*L1(:,:,i)*d;
         end
 
       
