@@ -37,6 +37,7 @@ tic
 %t_final = 2/2; %After shock
 
 t_final = 0.3/2; 
+%t_final = 1e-4;
 eps = 1e-4;
 %t_final = 1e-2;
 avoid_shock = false;
@@ -48,29 +49,90 @@ p = 3;
    % I.C. Cases:
        % sin(x+y)/2 (periodic)
        % 1/2(cos(x) + 1) in circle (smooth pertubation)
+       % Gaussian bump in circle (smooth pertubation)
        % Disjoint sphere (1 in circle, 0 outside)
-       % 
 
-%approach = "standard";
+approach = "standard";
 %approach = "beta_1_0";
-approach = "single_beta_ls";
+%approach = "single_beta_ls";
 %approach = "dir_deriv_sten_1";
 %approach = "dir_deriv_sten_2";
 %approach = "dir_deriv_sten_2";
 
-%pde = "burgers";
 pde = "linear";
-c = 2;
+c = 1.2; %Advection vector
 
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 
-u_initial = @(x,y) alpha + beta*sin((x+y)); 
+%Case 1: Smooth periodic sin wave in x + y (third order)
+%Case 2: Cos bump (need more refinement)
+%Case 3: Gaussian bump (Basically third order, need more refinement)
+%Case 4: Disjoint cylinder (1 inside radius, 0 outside)
+%Case 5: Smooth periodic sin wave in x and y (third order)
+
+
+init_case = 3;
+
+if init_case == 1
+
+  xL = 0; xR = 2*pi;
+  yL = 0; yR = 2*pi;
+
+    u_initial = @(x,y) alpha + beta*(sin(x+y)); 
+elseif init_case == 2
+
+    xL = 0; xR = 4*pi;
+    yL = 0; yR = 4*pi;
+
+    % Center and radius of bump
+    x0 = 2*pi;
+    y0 = 2*pi;
+    R = 1.75*pi;   
+    
+    % Smooth cosine bump (only inside the radius)
+    u_initial = @(x, y) ((sqrt((x - x0).^2 + (y - y0).^2) < R) .* ...
+            (0.25.*(0.5 * (cos(pi * sqrt((x - x0).^2 + (y - y0).^2) / R) + 1))));
+
+elseif init_case == 3
+
+    xL = 0; xR = 4*pi;
+    yL = 0; yR = 4*pi;
+
+    % Center and radius of bump
+    x0 = 2*pi;
+    y0 = 2*pi;
+    R =  1.75*pi;
+
+    u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R) .* ...
+           (exp(-1 ./ max((1 - ((sqrt((x - x0).^2 + (y - y0).^2)) / R).^2),1e-14)));
+
+
+elseif init_case == 4
+
+xL = 0; xR = 4*pi;
+yL = 0; yR = 4*pi;
+
+% Center and radius of bump
+x0 = 2*pi;
+y0 = 2*pi;
+R =  1.75*pi;
+
+u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R);
+
+elseif init_case == 5
+
+xL = 0; xR = 2*pi;
+yL = 0; yR = 2*pi;
+
+u_initial = @(x, y) alpha + beta*(sin(x) + sin(y));
+
+end
 
 f = @(u) c*u;
 g = @(u) c*u; 
 
-  n_array = [20,40,80,160];
+  n_array = [20,40,80];
 
    Method = "Least Squares Poly Approx"; p = 3;
         
@@ -82,9 +144,6 @@ g = @(u) c*u;
     LinfError= zeros(length(n_array),1); err = zeros(length(n_array),1); 
 
   n_set_array = n_array;
-
-  xL = 0; xR = 2*pi;
-  yL = 0; yR = 2*pi;
 
    %Cycle through all ranges of dx
    for kk=1:length(n_array)
@@ -129,6 +188,13 @@ g = @(u) c*u;
 
          cell_avg_array = reshape(cell_avg, N_y, N_x);
 
+         %Visualize initialitaion 
+
+         fig_num = 3*kk;
+         figure(fig_num)
+         trimesh(tri', xcoord, ycoord, cell_avg_array)
+         title("Plot of Initial Cell Averages with nX = "+ n_x + " and eps = " + eps)
+
         %Third order approximation
          k = 6; m = 7;
         
@@ -139,13 +205,14 @@ g = @(u) c*u;
             W(:,:,i) = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
-
           B = NaN(m+1, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
              B(:,:,i) = cell_vertex_smoothness_matrix(squeeze(W(:,:,i)),i,nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
+          %Only used for approach = "single_beta_ls", not generally
+          %necessary
           L1 = NaN(m+1, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
@@ -261,8 +328,13 @@ g = @(u) c*u;
 
         if avoid_shock == false
         uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
+        elem_area = reshape(area,N_y,N_x);
+        elem_area = elem_area(4:end-3,4:end-3);
 
-        L2_Error_quadratic(kk) = ((1/(n_steps))*sum(sum(abs(uDif).^2)))^(1/2);
+        %L2_Error_quadratic(kk) = ((1/(N_x*N_y))*sum(sum(abs(uDif).^2)))^(1/2);
+        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2))/sum(sum(elem_area)))^(1/2);
+        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2)))^(1/2);
+
         end
 
         if avoid_shock == true
@@ -428,8 +500,6 @@ function ordered_nghbr_n2d  = order_neighbor(nghbr_n2d,nod_in_e2d, edges,edge_tr
 
 end
 
-
-
 function u_1 = apply_bc(u_1,N_x,N_y)
 u_1 = reshape(u_1,N_y,N_x);
 %Pad twice periodically
@@ -496,7 +566,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
     
     u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
     
-    %Uncomment to test fully quadratic or linear
+    %Uncomment to test fully quadratic or first order
         %u_cell = @(x,y,i) P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2;
         %u_cell = @(x,y,i) u(i);
     
@@ -535,7 +605,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
                     % %burgers:
                     % a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
                     % 
-                    % %linear:
+                    %linear:
                     % a = c*ones(1,2)*abs(n_vec(1) + n_vec(2));
                     % 
                     % F_m = [f(uq_m); g(uq_m)]; %2x2
@@ -543,8 +613,9 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
                     % fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
                     % fv_2 = -fv_1;
 
-                    %Simplified LF for constant advection
+                    % %Simplified LF for constant advection
                     vn = c*(n_vec(1) + n_vec(2));
+                    %vn = 1*(n_vec(1) + n_vec(2));
 
                     fv_1 = vn*((uq_m + uq_p) - sign(vn)*(uq_p - uq_m));
                     fv_2 = -fv_1;
@@ -883,19 +954,33 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         
         %[Q,R] = qr(A);
         %W = R\(Q');    %(A'*A)\A'
-       
-        W = (A'*A)\(A');
-        P =(A'*A)\(L');
+        % 
+        % W = (A'*A)\(A');
+        % P =(A'*A)\(L');
+        % 
+        % mu = -L*P;
+        % E = W + (P*L*W)/mu;
+        % F = P/mu;
+        % 
+        % W = [E, F];
 
+
+          %Adding scaling factor for condition number
+        sc = 1/(m*max(max(abs(A))));
+
+        %Try again with QR Factorization
+        
+        %[Q,R] = qr(A);
+        %W = R\(Q');    %(A'*A)\A'
+        W = (sc*(A'*A))\(sc*A');
+        %P = R\(Q'*L'); %(A'*A)\(L');
+        P =(sc*(A'*A))\(L');
+        
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
-
-        W = [E, F];
-
         
-
-
+        W = [E, F];    
 end
 
 

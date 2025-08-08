@@ -33,13 +33,15 @@ clear all; close all;
     %enodes : tri(:,n) Nodes of triangle for a particular control volume
 
 tic
-%Uncomment the desired time
-t_final = 2/2; %After shock
 
-%t_final = 0.3/2; 
+%Uncomment the desired time
+%t_final = 2/2; %After shock
+t_final = 0.3/2; 
+
+%Choose eps to test
 eps = 1e-5;
 %t_final = 1e-2;
-avoid_shock = true;
+avoid_shock = false;
 
 p = 3;
 
@@ -50,18 +52,19 @@ approach = "standard";
 %approach = "dir_deriv_sten_1";
 %approach = "dir_deriv_sten_2";
 
-pde = "burgers";
-%pde = "linear";
+%pde = "burgers";
+pde = "linear";
 alpha = 1/3; beta = 2/3; 
-%u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
+
+c=0.5;
 
 if pde == "burgers"
 f = @(u) u.^2/2;
 g = @(u) u.^2/2;
 elseif pde == "linear"
-f = @(u) u;
-g = @(u) u; 
+f = @(u) c*u;
+g = @(u) c*u; 
 end
 
   n_array = [20,40,80];
@@ -201,7 +204,7 @@ end
             u_ref= @(x,y) solveBurgers2(alpha, beta, 2*t_final,(x+y));
 
          elseif pde == "linear"
-            u_ref = @(x,y) u_initial(x - t_final, y - t_final);
+            u_ref = @(x,y) u_initial(x - c*t_final, y - c*t_final);
         end
 
         x_dense = (xL:h/10:xR)';
@@ -250,7 +253,12 @@ end
         if avoid_shock == false
         uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
 
-        L2_Error_quadratic(kk) = ((1/(n_steps))*sum(sum(abs(uDif).^2)))^(1/2);
+        %L2_Error_quadratic(kk) = ((1/(n_steps))*sum(sum(abs(uDif).^2)))^(1/2);
+        
+        elem_area = reshape(area,N_y,N_x);
+        elem_area = elem_area(4:end-3,4:end-3);
+        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2)))^(1/2);
+
         end
 
         if avoid_shock == true
