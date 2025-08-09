@@ -39,7 +39,7 @@ tic
 
 t_final = 1/2; 
 %t_final = 1e-4;
-eps = 1e-4;
+eps = 1e-5;
 %t_final = 1e-2;
 avoid_shock = false;
 
@@ -93,7 +93,7 @@ elseif init_case == 2
     % Center and radius of bump
     x0 = 2*pi;
     y0 = 2*pi;
-    R = 1.75*pi;   
+    R = 1.5*pi;   
     
     % Smooth cosine bump (only inside the radius)
     u_initial = @(x, y) ((sqrt((x - x0).^2 + (y - y0).^2) < R) .* ...
@@ -109,7 +109,7 @@ elseif init_case == 3
     % Center and radius of bump
     x0 = 2*pi;
     y0 = 2*pi;
-    R =  1.75*pi;
+    R =  1.5*pi;
 
     u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R) .* ...
            (exp(-1 ./ max((1 - ((sqrt((x - x0).^2 + (y - y0).^2)) / R).^2),1e-14)));
@@ -126,7 +126,7 @@ y0 = 2*pi;
 
  dom = 4;
 
-R =  1.75*pi;
+R = pi;
 
 u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R);
 
@@ -145,7 +145,7 @@ end
 f = @(u) c*u;
 g = @(u) c*u; 
 
-   n_array = [20,40];
+   n_array = [20,40,80];
 
    Method = "Multi-Resolution WENO"; p = 3;
         
@@ -204,7 +204,7 @@ g = @(u) c*u;
          %Visualize initialitaion 
 
          fig_num = 3*kk;
-         figure(fig_num)
+         figure(1)
          trimesh(tri', xcoord, ycoord, cell_avg_array)
          title("Plot of Initial Cell Averages with nX = "+ n_x + " and eps = " + eps)
 
@@ -310,7 +310,6 @@ g = @(u) c*u;
              title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
              saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
-             %fig_num = fig_num + 1;
              view([-1, 1, 0]);
              saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
@@ -326,7 +325,6 @@ g = @(u) c*u;
              saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              view([-1, 1, 0]);
-             fig_num = fig_num + 1;
              saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              fig_num = fig_num + 3;
