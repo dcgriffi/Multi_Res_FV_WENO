@@ -3,7 +3,8 @@
 
 clear all; close all;
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
+%Update the path to match your system
+pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 
     %Stored Info Guide: 
     % n2d: Number of nodes/control volumes/ triangle vertices (nx x ny)
@@ -30,13 +31,13 @@ clear all; close all;
     % edge_cross_dxdy: (4xedge_num) Gives cross-distances for the edge
     % (used in gradient reconstruction)
 
-    %enodes : tri(:,n) Nodes of triangle for a particular control volume
+    %  enodes : tri(:,n) Nodes of triangle for a particular control volume
 
 tic
 %Uncomment the desired time
 %t_final = 2/2; %After shock
 
-t_final = 0.3/2; 
+t_final = 1/2; 
 %t_final = 1e-4;
 eps = 1e-4;
 %t_final = 1e-2;
@@ -60,7 +61,7 @@ approach = "standard";
 %approach = "dir_deriv_sten_2";
 
 pde = "linear";
-c = 1.2; %Advection vector
+c = 0.75; %Advection vector
 
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
@@ -79,11 +80,15 @@ if init_case == 1
   xL = 0; xR = 2*pi;
   yL = 0; yR = 2*pi;
 
+  dom = 2;
+
     u_initial = @(x,y) alpha + beta*(sin(x+y)); 
 elseif init_case == 2
 
     xL = 0; xR = 4*pi;
     yL = 0; yR = 4*pi;
+
+    dom = 4;
 
     % Center and radius of bump
     x0 = 2*pi;
@@ -98,6 +103,8 @@ elseif init_case == 3
 
     xL = 0; xR = 4*pi;
     yL = 0; yR = 4*pi;
+
+    dom = 4;
 
     % Center and radius of bump
     x0 = 2*pi;
@@ -116,14 +123,20 @@ yL = 0; yR = 4*pi;
 % Center and radius of bump
 x0 = 2*pi;
 y0 = 2*pi;
+
+ dom = 4;
+
 R =  1.75*pi;
 
 u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R);
+
 
 elseif init_case == 5
 
 xL = 0; xR = 2*pi;
 yL = 0; yR = 2*pi;
+
+dom = 2;
 
 u_initial = @(x, y) alpha + beta*(sin(x) + sin(y));
 
@@ -132,9 +145,9 @@ end
 f = @(u) c*u;
 g = @(u) c*u; 
 
-  n_array = [20,40,80];
+   n_array = [20,40];
 
-   Method = "Least Squares Poly Approx"; p = 3;
+   Method = "Multi-Resolution WENO"; p = 3;
         
 
   %Preallocate arrays for memory
@@ -284,8 +297,6 @@ g = @(u) c*u;
         u_ref_y = u_ref(0.001, y_dense);
         fig_num = kk;
         fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-        Method = "Least Squares Poly Approx"; 
-
    
      
 
@@ -297,11 +308,11 @@ g = @(u) c*u;
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, exact_avg_array)
              title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              %fig_num = fig_num + 1;
              view([-1, 1, 0]);
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
 
 
@@ -311,12 +322,12 @@ g = @(u) c*u;
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, approx_avg_array)
              title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + n_x + " and eps = " + eps)
-             %saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx.jpg',pth,t_final*2,eps),'jpeg')
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_init_%d.jpg',pth,t_final*2,eps,init_case),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              view([-1, 1, 0]);
-             %fig_num = fig_num + 1;
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
+             fig_num = fig_num + 1;
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              fig_num = fig_num + 3;
         end
@@ -375,10 +386,14 @@ g = @(u) c*u;
    
     format shorte
     p = 3;
-    err_name = "L2 Error";
-    T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
-    order_plot(L2_Error_quadratic, Method,p,DX,err_name, k);
-   % saveas(10, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
+    err_name = "L2";
+
+    fig_num = fig_num + 1;
+    order_table(DX,n_array, L2_Error_quadratic, err_name,fig_num,dom, pth, t_final, eps, approach, init_case); 
+    order_plot(L2_Error_quadratic, Method,p,DX,err_name, k, fig_num + 1);
+    
+   % saveas(fig_num , sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_table_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+    saveas(fig_num + 1, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
 
 %%%%%%%%%%%Start of new functions%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -605,7 +620,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
                     % %burgers:
                     % a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
                     % 
-                    %linear:
+                    % % linear:
                     % a = c*ones(1,2)*abs(n_vec(1) + n_vec(2));
                     % 
                     % F_m = [f(uq_m); g(uq_m)]; %2x2
@@ -619,7 +634,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
 
                     fv_1 = vn*((uq_m + uq_p) - sign(vn)*(uq_p - uq_m));
                     fv_2 = -fv_1;
-          
+
     
                 inner_sum(v1) = inner_sum(v1) + sum(fv_1); %Summing over quad points for edge
                 inner_sum(v2) = inner_sum(v2) + sum(fv_2); %weights = 1/2
@@ -1155,8 +1170,8 @@ end
 
 
 
-function order_plot(L2Error,Method,p,dx,err_name, k)
-    figure(10)
+ function order_plot(L2Error,Method,p,dx,err_name, k,fig_num)
+    figure(fig_num)
     hold on;
     plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
     plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
@@ -1166,11 +1181,75 @@ function order_plot(L2Error,Method,p,dx,err_name, k)
     legend('', sprintf('p=%i', p),'location','southeast')
 end
 
-function T = order_table(dx,n_array, L2Error, err_name)
-    L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
-    %Format table
-    fractions = arrayfun(@(x) sprintf('1/%d', x), n_array, 'UniformOutput', false);
-    T = table(fractions', L2Error(:),[0;L2Order(:)], ...
-        'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
-    disp(T)
+function T1 = order_table(dx,n_array, L2Error, err_name, fig_num, dom, pth, t_final, eps, approach, init_case)
+    
+
+     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
+ 
+
+%%%If want to save as latex tabular output
+    % % Example: 4*pi/n instead of 1/n
+     fractions = arrayfun(@(n) sprintf('$%d\\pi/%d$', dom, n), n_array, 'UniformOutput', false);
+    % 
+    T1 = table(fractions', L2Error(:),[0;L2Order(:)], ...
+    'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
+
+    % Create filename string for .tex
+    tex_filename = sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_table_%s_init_%d.tex', ...
+                           pth, t_final*2, eps, approach, init_case);
+    
+    % Open file for writing
+    fid = fopen(tex_filename, 'w');
+    
+    % Begin LaTeX table
+    fprintf(fid, '\\begin{tabular}{c c c}\n');
+    fprintf(fid, '\\hline\n');
+    
+    % Column headers
+    fprintf(fid, '%s & %s & %s \\\\\n', T1.Properties.VariableNames{:});
+    fprintf(fid, '\\hline\n');
+    
+    % Rows
+    for i = 1:height(T1)
+        fprintf(fid, '%s & %.4e & %.4f \\\\\n', ...
+            T1.dx{i}, ...
+            T1.('L2 Error')(i), ...
+            T1.('L2 Order')(i));
+    end
+    
+    % End table
+    fprintf(fid, '\\hline\n');
+    fprintf(fid, '\\end{tabular}\n');
+    
+    % Close file
+    fclose(fid);
+
+  %%%If want to save as figure: 
+    % %Format basic table
+    % fractions = arrayfun(@(x) sprintf('1/%d', x), n_array, 'UniformOutput', false);
+    % 
+    % T1 = table(fractions', L2Error(:),[0;L2Order(:)], ...
+    %     'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
+    % 
+    % 
+    % % Format numeric data as strings
+    % formattedData = [ ...
+    %     T1.dx, ...
+    %     cellstr(num2str(T1.('L2 Error'), '%.4e')), ...
+    %     cellstr(num2str(T1.('L2 Order'), '%.4f')) ...
+    % ];
+    % 
+    % % Create figure and uitable
+    % % Create a specific figure number (e.g., 5)
+    % f = figure(fig_num);  % This ensures the figure number is exactly 5
+    % clf(f);         % Clear it in case it already exists
+    % set(f, 'Position', [100 100 600 150], 'Color', 'w');
+    % 
+    % T = uitable(f, ...
+    %     'Data', formattedData, ...
+    %     'ColumnName', T1.Properties.VariableNames, ...
+    %     'RowName', [], ...
+    %     'Units', 'Normalized', ...
+    %     'Position', [0 0 1 1], ...
+    %     'FontSize', 12);
 end
