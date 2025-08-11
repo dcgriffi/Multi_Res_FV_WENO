@@ -12,7 +12,7 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
   These scripts implement constrained least squares reconstructions—both quadratic and linear—for scalar functions. They serve as the building blocks for the multi-resolution algorithm.
 
 - **FV_LS_*.m**  
-  These contain the quadratic least squares reconstructions applied within a finite volume framework. They illustrate the formation of oscillations near discontinuous initial conditions or shock regions.
+  These contain the quadratic least squares reconstructions applied within a finite volume framework. They illustrate the formation of oscillations near discontinuous initial conditions or shock regions and third order convergence in smooth regions.
 
 - **Multires_*.m / .asv**  
   These files implement the multi-resolution algorithm for hyperbolic conservation laws:  
@@ -26,10 +26,7 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
   - `get_fv_arrays.m`: Prepares finite volume grid arrays and connectivity.  
   - `integQuad.m`: Performs quadrature integrations.  
   - `lgwt.m`: Computes Legendre-Gauss nodes and weights.
-
-- **Additional Examples:**  
   - `solveBurgers2.m`: Solves Burgers' equation as a test case.  
-  - `LS_Lin_2D_Rectangle.m` & `LS_Quad_2D_Rectangle.m`: Least squares for 2D rectangular grids.
 
 ## Features
 
