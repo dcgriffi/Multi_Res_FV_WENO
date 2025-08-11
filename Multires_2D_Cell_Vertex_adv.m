@@ -1,5 +1,7 @@
 %Multi-resolution WENO implementation for advection with cell-vertex mesh (constrained) 
-    %%% Run pde = linear for order or pde = burgers for behavior around shock
+    %%% Update pth, choose I.C., linear smoothness indicator approach, and
+    %%% tune epsilon
+
 
 clear all; close all;
 
@@ -31,47 +33,28 @@ pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/R
     % edge_cross_dxdy: (4xedge_num) Gives cross-distances for the edge
     % (used in gradient reconstruction)
 
-    %  enodes : tri(:,n) Nodes of triangle for a particular control volume
+    % enodes : tri(:,n) Nodes of triangle for a particular control volume
 
-tic
-%Uncomment the desired time
-%t_final = 2/2; %After shock
 
 t_final = 1/2; 
-%t_final = 1e-4;
 eps = 1e-5;
-%t_final = 1e-2;
-avoid_shock = false;
-
+%eps = 1e-4;
 p = 3;
 
-
-%%%Possible options: Constant coefficient, variable coefficient
-   % I.C. Cases:
-       % sin(x+y)/2 (periodic)
-       % 1/2(cos(x) + 1) in circle (smooth pertubation)
-       % Gaussian bump in circle (smooth pertubation)
-       % Disjoint sphere (1 in circle, 0 outside)
-
-approach = "standard";
-%approach = "beta_1_0";
+approach = "standard";   
+%approach = "beta_1_0"; 
 %approach = "single_beta_ls";
-%approach = "dir_deriv_sten_1";
-%approach = "dir_deriv_sten_2";
+%approach = "dir_deriv_sten_1"; 
 %approach = "dir_deriv_sten_2";
 
 pde = "linear";
-c = 0.75; %Advection vector
-
-alpha = 1/3; beta = 2/3; 
-%u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
+c = 0.75; %Advection vector (here just constant, easily adjust)
 
 %Case 1: Smooth periodic sin wave in x + y (third order)
-%Case 2: Cos bump (need more refinement)
-%Case 3: Gaussian bump (Basically third order, need more refinement)
+%Case 2: Cos bump (second order, not quite smooth enough)
+%Case 3: Gaussian bump (third order)
 %Case 4: Disjoint cylinder (1 inside radius, 0 outside)
 %Case 5: Smooth periodic sin wave in x and y (third order)
-
 
 init_case = 3;
 
@@ -82,7 +65,8 @@ if init_case == 1
 
   dom = 2;
 
-    u_initial = @(x,y) alpha + beta*(sin(x+y)); 
+  alpha = 1/3; beta = 2/3; 
+  u_initial = @(x,y) alpha + beta*(sin(x+y)); 
 elseif init_case == 2
 
     xL = 0; xR = 4*pi;
@@ -111,8 +95,14 @@ elseif init_case == 3
     y0 = 2*pi;
     R =  1.5*pi;
 
+    
+    sigma = 0.9;
+ 
+
+    % Smooth gaussian bump (only inside the radius)
     u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R) .* ...
-           (exp(-1 ./ max((1 - ((sqrt((x - x0).^2 + (y - y0).^2)) / R).^2),1e-14)));
+            exp(-((sqrt((x-x0).^2 + (y-y0).^2)).^2)/(2*sigma^2)) .* ...
+            (exp(-1 ./ max((1 - ((sqrt((x - x0).^2 + (y - y0).^2)) / R).^2),1e-14)));
 
 
 elseif init_case == 4
@@ -126,7 +116,7 @@ y0 = 2*pi;
 
  dom = 4;
 
-R = pi;
+R = 1.5*pi;
 
 u_initial = @(x, y) (sqrt((x - x0).^2 + (y - y0).^2) < R);
 
@@ -138,14 +128,15 @@ yL = 0; yR = 2*pi;
 
 dom = 2;
 
+alpha = 1/3; beta = 2/3; 
 u_initial = @(x, y) alpha + beta*(sin(x) + sin(y));
 
 end
 
-f = @(u) c*u;
-g = @(u) c*u; 
+    f = @(u) c*u;
+    g = @(u) c*u; 
 
-   n_array = [20,40,80];
+   n_array = [20,40,80,160];
 
    Method = "Multi-Resolution WENO"; p = 3;
         
@@ -170,28 +161,18 @@ g = @(u) c*u;
         
           dx  = x(2:end) - x(1:end-1);
           dy  = y(2:end) - y(1:end-1);
-        
-          %Will update later for nonuniform case
-          
+                  
           x = [x(1) - dx(end) - dx(end - 1) - h,x(1) - dx(end) - dx(end - 1) , x(1) - dx(end), x, x(end) + h, x(end) + dx(1) + dx(2), x(end) + dx(1) + dx(2)+h];
           y = [y(1) - dy(end) - dy(end - 1) - h,y(1) - dy(end) - dy(end - 1),  y(1) - dx(end), y, y(end) + h, y(end) + dy(1) + dy(2), y(end) + dy(1) + dy(2)+h];
 
           N_x = length(x);
           N_y = length(y);
 
-          % n_x = N_x - 7;
-          % n_y = N_y - 7;
-
          DX(kk)=(xR-xL)/(n_x);
        
          [tri, nodnum, xcoord, ycoord, e2d, n2d] = gen_reg_tri_mesh(x,y);
 
          [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d, edge_tri,elem_edges,edge_cross_dxdy] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d);
-
-          % area_in = reshape(area, N_y,N_x);
-          % area_in = area_in(4:end - 3, 4:end - 3);
-          % area_in = reshape(area_in, 1,(N_y-6)*(N_x-6));
-
 
          [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_arrays(N_x,N_y);
 
@@ -208,24 +189,26 @@ g = @(u) c*u;
          trimesh(tri', xcoord, ycoord, cell_avg_array)
          title("Plot of Initial Cell Averages with nX = "+ n_x + " and eps = " + eps)
 
-        %Third order approximation
+         %Third order approximation
          k = 6; m = 7;
         
 
+         %Precompute matrix for constrained quadratic reconstruction
           W = NaN(k, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
             W(:,:,i) = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
+          %Precompute matrix for quadratic smoothness indicator
           B = NaN(m+1, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
              B(:,:,i) = cell_vertex_smoothness_matrix(squeeze(W(:,:,i)),i,nod_in_e2d,tri,xcoord,ycoord,area);
           end
 
-          %Only used for approach = "single_beta_ls", not generally
-          %necessary
+          %Precompute matrix for linear smoothness indicator
+                % ONLY used to try approach = "single_beta_ls", NOT generally necessary
           L1 = NaN(m+1, m+1, N_x*N_y);
           for ii = 1:inner_steps
             i = inner_v_vec_2(ii);
@@ -239,7 +222,7 @@ g = @(u) c*u;
             v1 = edges(1,e); v2 = edges(2,e);
 
             %Compute results for interior points (where two triangles adjacent) 
-            %Alternatively can run until edge_in
+                    %Alternatively can run until edge_in
 
             if (edge_tri(1,e) && edge_tri(2,e) ~= 0)
                 cross_info = edge_cross_dxdy(:,e);
@@ -256,6 +239,7 @@ g = @(u) c*u;
          u = cell_avg; %(Note: cell_avg = NxN - Only update (N-4xN-4),(N-2xN-2) with periodic boundary
 
         %Change both functions into plottable array
+        tic
         t = 0;
         while t < t_final     
             %Choose appropriate time step
@@ -284,17 +268,8 @@ g = @(u) c*u;
         toc
         %Prep for visualization
 
-        if pde == "burgers"
-            u_ref= @(x,y) solveBurgers2(alpha, beta, 2*t_final,(x+y));
-
-         elseif pde == "linear"
-            u_ref = @(x,y) u_initial(x - c*t_final, y - c*t_final);
-        end
-
-        x_dense = (xL:h/10:xR)';
-        y_dense = (yL:h/10:yR);
-        u_ref_x = u_ref(x_dense, 0.001);
-        u_ref_y = u_ref(0.001, y_dense);
+        u_ref = @(x,y) u_initial(x - c*t_final, y - c*t_final);
+       
         fig_num = kk;
         fig_num = fig_num+1; variable_name = "sin(x+y)"; 
    
@@ -308,10 +283,10 @@ g = @(u) c*u;
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, exact_avg_array)
              title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              view([-1, 1, 0]);
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
 
 
@@ -321,11 +296,11 @@ g = @(u) c*u;
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, approx_avg_array)
              title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + n_x + " and eps = " + eps)
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_init_%d.jpg',pth,t_final*2,eps,init_case),'jpeg')
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_init_%d.jpg',pth,t_final*2,eps,init_case),'jpeg')
+           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              view([-1, 1, 0]);
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
              fig_num = fig_num + 3;
         end
@@ -335,49 +310,14 @@ g = @(u) c*u;
         exact_avg_array = reshape(exact_avg_vec,N_y,N_x);
         approx_avg_array = reshape(u,N_y,N_x);
 
-        if avoid_shock == false
         uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
         elem_area = reshape(area,N_y,N_x);
         elem_area = elem_area(4:end-3,4:end-3);
 
-        %L2_Error_quadratic(kk) = ((1/(N_x*N_y))*sum(sum(abs(uDif).^2)))^(1/2);
-        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2))/sum(sum(elem_area)))^(1/2);
+        %L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2))/sum(sum(elem_area)))^(1/2);
         L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2)))^(1/2);
 
-        end
-
-        if avoid_shock == true
-
-        %Find shock idx (which cells are outside of shock)
-
-            global_L2_Error = 0;
-  
-            xShock = 2*pi + alpha * t_final;
-            diag_shock1 = xShock - pi;
-            diag_shock2 = xShock + pi;    
-            
-            dist_shock1 = abs(xcoord + ycoord - diag_shock1);
-            dist_shock2 = abs(xcoord + ycoord - diag_shock2);
-
-            padding = 1;
-
-            in_shock1 = dist_shock1 <= padding;
-            in_shock2 = dist_shock2 <= padding;
-
-            away_from_shock = ~(in_shock1 |  in_shock2);
-            cell_count = sum(away_from_shock);
-           
-            away_from_shock = reshape(away_from_shock, N_y,N_x);
-
-            exact_avg_array = exact_avg_array(4:end-3, 4:end-3);
-            approx_avg_array = approx_avg_array(4:end-3, 4:end-3);
-            away_from_shock = away_from_shock(4:end-3, 4:end-3);
-
-            uDif = approx_avg_array(away_from_shock) - exact_avg_array(away_from_shock);
-
-            L2_Error_quadratic(kk) = ((1/(cell_count))*sum(sum(abs(uDif).^2)))^(1/2);
-
-        end
+      
 
    
    end
@@ -387,14 +327,13 @@ g = @(u) c*u;
     err_name = "L2";
 
     fig_num = fig_num + 1;
-    order_table(DX,n_array, L2_Error_quadratic, err_name,fig_num,dom, pth, t_final, eps, approach, init_case); 
+    T = order_table(DX,n_array, L2_Error_quadratic, err_name,fig_num,dom, pth, t_final, eps, approach, init_case); 
+    disp(T);
     order_plot(L2_Error_quadratic, Method,p,DX,err_name, k, fig_num + 1);
     
    % saveas(fig_num , sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_table_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-    saveas(fig_num + 1, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+   % saveas(fig_num + 1, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
 
-
-%%%%%%%%%%%Start of new functions%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_arrays(N_x,N_y)
 
@@ -407,7 +346,6 @@ function [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_
  %  inner_v_array_2: ensures that we have reconstruction with full stencil
  %  ind_array: Has reconstructed neighbors for flux computation
 
-
  bound_tri_vec = 1:N_x*N_y;
  bound_tri_array = reshape(bound_tri_vec, N_y,N_x);
 
@@ -419,8 +357,8 @@ function [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_
  inner_v_vec_2 = reshape(inner_v_array_2, (N_x-4)*(N_y-4),1);%Vector for all reconstruction
  ind_vec = reshape(ind_array, (N_x - 6)*(N_y - 6),1);        %Vector for stored computation
 
-  n_steps = (N_x - 6)*(N_y - 6); %Size of ind_vec
-  inner_steps = (N_x-4)*(N_y-4); %Size of inner_v_vec_2
+ n_steps = (N_x - 6)*(N_y - 6); %Size of ind_vec
+ inner_steps = (N_x-4)*(N_y-4); %Size of inner_v_vec_2
 
 end
 
@@ -515,8 +453,8 @@ end
 
 function u_1 = apply_bc(u_1,N_x,N_y)
 u_1 = reshape(u_1,N_y,N_x);
-%Pad twice periodically
 
+%Pad twice periodically
 u_1(3,:) = u_1(end - 4,:);
 u_1(end-2,:) = u_1(5,:);
 u_1(:,3) = u_1(:,end - 4);
@@ -554,8 +492,8 @@ function B = cell_vertex_smoothness_matrix(W,i, nod_in_e2d,tri,xcoord,ycoord,are
     B5 = (4*(W5')*W5 + (W4'*W4))*L5;
     B6 = ((W4')*W4 + 4*(W6')*W6)*L6;
 
-    %B = 121/100*(B1 + B2 + B3 + B4 + B5 + B6) ;
-    B = (B1 + B2 + B3 + B4 + B5 + B6);
+    %B = 121/100*(B1 + B2 + B3 + B4 + B5 + B6) ; %Literature recommended beta_2
+    B = (B1 + B2 + B3 + B4 + B5 + B6); %Alt for better accuracy
 
 end
 
@@ -569,8 +507,6 @@ function L1 = lin_cell_vertex_smoothness_matrix(W,i, nod_in_e2d,tri,xcoord,ycoor
 end
 
 function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,f,g,nghbr_n2d,ind_vec,area,inner_v_vec_2,inner_steps,B,a,edge_cross_dxdy,eps,approach,edge_quad,c,L1)
-    %quad_res = weno_reconstruction(W,sten_array,coord_array,quad_vals,v_vec,N); 
-    %flux_array = find_fluxes(quad_res,sten_array,N,f,g,a);
 
     inner_sum = zeros(1,N_x*N_y);
 
@@ -579,7 +515,7 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
     
     u_cell = @(x,y,i) P(1,i)*u(i)+ P(2,i)*(11/10*(P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2) - 1/10*u(i));
     
-    %Uncomment to test fully quadratic or first order
+    %Uncomment to test fully quadratic or first order reconstruction
         %u_cell = @(x,y,i) P(3,i) + P(4,i)*x + P(5,i)*y+ P(6,i)*x.*y + P(7,i)*x.^2 + P(8,i)*y.^2;
         %u_cell = @(x,y,i) u(i);
     
@@ -611,27 +547,24 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
                 %Use LS/multi-res for scalar reconstruction from either cell
                 uq_m = u_cell(quad_points(1,:),quad_points(2,:),v1);
                 uq_p = u_cell(quad_points(1,:),quad_points(2,:),v2);
-            
-                %fv_1(q) = lf(uq_1,uq_2,n_vec,f,g); %u_m, u_p
-    
-                %LF
-                    % %burgers:
-                    % a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
-                    % 
-                    % % linear:
-                    % a = c*ones(1,2)*abs(n_vec(1) + n_vec(2));
-                    % 
-                    % F_m = [f(uq_m); g(uq_m)]; %2x2
-                    % F_p = [f(uq_p); g(uq_p)]; %2x2
-                    % fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
-                    % fv_2 = -fv_1;
+                
+                % %LF for general f and g
+                % % burgers:
+                % a = max(abs(uq_m.*(n_vec(1) + n_vec(2))), abs(uq_p.*(n_vec(1) + n_vec(2))));
+                % 
+                % % linear:
+                % a = c*ones(1,2)*abs(n_vec(1) + n_vec(2));
+                % 
+                % F_m = [f(uq_m); g(uq_m)]; %2x2
+                % F_p = [f(uq_p); g(uq_p)]; %2x2
+                % fv_1 = n_vec'*(F_m + F_p) - a.*(uq_p-uq_m); %1/2 at end
+                % fv_2 = -fv_1;
 
-                    % %Simplified LF for constant advection
-                    vn = c*(n_vec(1) + n_vec(2));
-                    %vn = 1*(n_vec(1) + n_vec(2));
+                % %Simplified LF for constant advection
+                vn = c*(n_vec(1) + n_vec(2));
 
-                    fv_1 = vn*((uq_m + uq_p) - sign(vn)*(uq_p - uq_m));
-                    fv_2 = -fv_1;
+                fv_1 = vn*((uq_m + uq_p) - sign(vn)*(uq_p - uq_m));
+                fv_2 = -fv_1;
 
     
                 inner_sum(v1) = inner_sum(v1) + sum(fv_1); %Summing over quad points for edge
@@ -640,14 +573,6 @@ function u_hold = L(u,n_steps, N_x,N_y, ed2d,xcoord,ycoord,edges,edge_tri,tri,W,
          end
        
     end
-
-    % 
-    % u_hold = NaN(1,N_x*N_y);
-    % for ii = 1:n_steps
-    %     i = ind_vec(ii);
-    %     area_i = area(i);
-    %     u_hold(i) = -(1/area_i)*inner_sum(i);
-    % end
 
     u_hold = -inner_sum./(4*area);
 end
@@ -675,6 +600,7 @@ function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_step
     
         C = W(:,:,i)*d;
 
+        %Functions if computing directly at quad points
         %q1 = @(x,y) v_vec(i);
         %q2 = @(x,y) C(1) + C(2)*x + C(3)*y+ C(4)*x.*y + C(5)*x.^2 + C(6)*y.^2;
     
@@ -702,7 +628,6 @@ function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_step
         [C2_2, C3_2, b1_2] = compute_lin_smooth(i,stencil_2,u,nghbr_n2d,xcoord,ycoord,area_i,approach);
         [C2_3, C3_3, b1_3] = compute_lin_smooth(i,stencil_3,u,nghbr_n2d,xcoord,ycoord,area_i,approach);
 
-
         beta_dif_avg =(abs(b1_1 - b1_2)+abs(b1_1 - b1_3) + abs(b1_2 - b1_3))/3;
 
         sigma_1 = 1/3*(1 + (beta_dif_avg)^2/(b1_1 + eps));
@@ -717,22 +642,19 @@ function P  = weno_reconstruction(u,W,nghbr_n2d,N_x,N_y,inner_v_vec_2,inner_step
                 +(area_i/sigma^2)*(sigma_1*(C3_1) + sigma_2*(C3_2)+...
                                + sigma_3*(C3_3))^2;
 
-         %Alternative to linear combo:
+         %Alternative to linear combo (generally works):
              %beta_1 = min([b1_1,b1_2,b1_3]); 
 
 
         elseif approach == "beta_1_0"
-            beta_1 = 0;
+            beta_1 = 0; %(works, but smearing)
         elseif approach == "single_beta_ls"
-            beta_1 = d'*L1(:,:,i)*d;
+            beta_1 = d'*L1(:,:,i)*d; %(Uses lin coefficents over whole stencil, doesn't provide much)
         end
-
-      
 
         gam_12 = 1/11; gam_22 = 10/11; 
 
         %Build B_2 using precomputed matrix
-            %Note: Using smoothness indicator from q only
         beta_2 = d'*B(:,:,i)*d;
    
 
@@ -757,8 +679,8 @@ function [C2, C3, b1] = compute_lin_smooth(i,stencil,u,nghbr_n2d,xcoord,ycoord,a
 
         v1 = u(cell_1); v2 = u(cell_2); v3 = u(cell_3);
 
-        %Note: for non-uniform, center vertex != centroids; approach =
-        %standard could break down
+        %Note: for non-uniform, center vertex != centroids; 
+        % approach = standard not exact, but should still work
 
         xc_1 = xcoord(cell_1); xc_2 = xcoord(cell_2); xc_3 = xcoord(cell_3);
         yc_1 = ycoord(cell_1); yc_2 = ycoord(cell_2); yc_3 = ycoord(cell_3);
@@ -770,6 +692,7 @@ function [C2, C3, b1] = compute_lin_smooth(i,stencil,u,nghbr_n2d,xcoord,ycoord,a
         %Note: Could check if determinant is zero to see if colinear
         
             if approach == "dir_deriv_sten_1" ||  approach == "dir_deriv_sten_2"
+                %Uses directional derivatives for coefficients
 
             C2 = 0; C3 = 0;
             C_arr = [0,0];
@@ -809,7 +732,7 @@ function [C2, C3, b1] = compute_lin_smooth(i,stencil,u,nghbr_n2d,xcoord,ycoord,a
             end
 
 
-        %Standard Uniform Approach
+        %Approach uses 
         if approach == "standard"
         rhs = [dv2; dv3];
 
@@ -826,8 +749,6 @@ function [C2, C3, b1] = compute_lin_smooth(i,stencil,u,nghbr_n2d,xcoord,ycoord,a
         %     error("Linear poly doesn't fit")
         % end
 
-
-
         %Full solve (doesn't work if any colinear)
         % A = [1, xc_1, yc_1; 1, xc_2, yc_2; 1, xc_3, yc_3];
         % v_vec = [v1;v2;v3];
@@ -839,6 +760,7 @@ function [C2, C3, b1] = compute_lin_smooth(i,stencil,u,nghbr_n2d,xcoord,ycoord,a
 end
 
 function fhat = lf(u_m,u_p,n_vec,f,g,a)
+    %No longer calling this directly, but included for ref
     %burgers:
     a = max(abs(u_m*(n_vec(1) + n_vec(2))), abs(u_p*(n_vec(1) + n_vec(2))));
         %a = max(abs(u_m), abs(u_p));
@@ -896,9 +818,10 @@ function  cell_int = int_over_cell(f,i,nod_in_e2d,tri,xcoord,ycoord)
 end
 
 function result = tri_int(tri_coord, f)
-
-%Approach from literature, only accurate for monomials, not polynomials,
-%  Updated to be symmetric, should work polynomials degree 2
+    
+%Integration over triangles: 
+%   Approach from literature, only accurate for monomials, not polynomials,
+%   Updated to be symmetric, should be exact for polynomials degree 2
 
     %%%tri_coord : 3 x 2 containing triangle coordinates to integrate over
 
@@ -937,7 +860,7 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
 
     
         f1 = @(x,y) 1;    f2 = @(x,y) x;       f3 = @(x,y) y; 
-        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2; f6 = @(x,y) y.^2;
+        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2;    f6 = @(x,y) y.^2;
         
         %Build matrix for least squares
         A = zeros(m,k);
@@ -978,7 +901,7 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         % W = [E, F];
 
 
-          %Adding scaling factor for condition number
+        %Adding scaling factor for condition number
         sc = 1/(m*max(max(abs(A))));
 
         %Try again with QR Factorization
@@ -999,6 +922,8 @@ end
 
 
  function [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d, edge_tri,elem_edges,edge_cross_dxdy] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d)
+
+ %Code borrowed from Sergey Danilov
 
  n_num=zeros([1,n2d]);
  for n=1:e2d
@@ -1059,7 +984,6 @@ end
      check(aux(1:cc))=0;      
   end;
 
-  %Not sure if need all of this stuff yet... maybe for FV
 [edges,edge_num, elem_edges,edge_tri,ed2d,ed2d_in,edge_dxdy, edge_cross_dxdy] = get_fv_arrays(tri, xcoord, ycoord ,n_num,ng_num, nghbr_n2d, n2d,nod_in_e2d,e2d);
 
    % rearrange neighbourhood so that n follows first %%% TO DO %%%
@@ -1185,7 +1109,7 @@ function T1 = order_table(dx,n_array, L2Error, err_name, fig_num, dom, pth, t_fi
      L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
  
 
-%%%If want to save as latex tabular output
+%%%If want to save as latex tabular output (written with ChatGPT help)
     % % Example: 4*pi/n instead of 1/n
      fractions = arrayfun(@(n) sprintf('$%d\\pi/%d$', dom, n), n_array, 'UniformOutput', false);
     % 
