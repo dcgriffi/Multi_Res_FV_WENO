@@ -3,7 +3,7 @@
 
 clear all; close all;
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
+pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 
     %Stored Info Guide: 
     % n2d: Number of nodes/control volumes/ triangle vertices (nx x ny)
@@ -35,25 +35,25 @@ clear all; close all;
 tic
 
 %Uncomment the desired time
-%t_final = 2/2; %After shock
-t_final = 0.3/2; 
+t_final = 2/2; %After shock
+%t_final = 0.3/2; 
 
 %Choose eps to test
 eps = 1e-5;
 %t_final = 1e-2;
-avoid_shock = false;
+avoid_shock = true;
 
 p = 3;
 
 
-approach = "standard";
+%approach = "standard";
 %approach = "beta_1_0";
-%approach = "single_beta_ls"; 
+approach = "single_beta_ls"; 
 %approach = "dir_deriv_sten_1";
 %approach = "dir_deriv_sten_2";
 
-%pde = "burgers";
-pde = "linear";
+pde = "burgers";
+%pde = "linear";
 alpha = 1/3; beta = 2/3; 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
 
@@ -69,7 +69,7 @@ end
 
   n_array = [20,40,80];
 
-   Method = "Least Squares Poly Approx"; p = 3;
+   Method = "Multiresolution WENO"; p = 3;
         
 
   %Preallocate arrays for memory
@@ -223,11 +223,10 @@ end
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, exact_avg_array)
              title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact.jpg',pth,t_final*2,eps,approach),'jpeg')
 
-             %fig_num = fig_num + 1;
              view([-1, 1, 0]);
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
 
              %Plot approx cell averages
              fig_num = 5;
@@ -235,12 +234,11 @@ end
              figure(fig_num)
              trimesh(tri', xcoord, ycoord, approx_avg_array)
              title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + n_x + " and eps = " + eps)
-             %saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx.jpg',pth,t_final*2,eps),'jpeg')
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx.jpg',pth,t_final*2,eps),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
 
              view([-1, 1, 0]);
-             %fig_num = fig_num + 1;
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
+             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
 
              fig_num = fig_num + 3;
         end
@@ -302,7 +300,7 @@ end
     err_name = "L2 Error";
     T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
     order_plot(L2_Error_quadratic, Method,p,DX,err_name, k);
-   % saveas(10, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
+    saveas(10, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
 
 
 %%%%%%%%%%%Start of new functions%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -871,19 +869,20 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         L(6) = 1/area_i*int_over_cell(f6,  i,nod_in_e2d,tri,xcoord,ycoord);
         
         
-        %Note: Could try again with QR Factorization
-        
-        %[Q,R] = qr(A);
-        %W = R\(Q');    %(A'*A)\A'
-       
-        W = (A'*A)\(A');
-        P =(A'*A)\(L');
+       %   %Can also add scaling factor for condition number
+         %sc = 1/(m*max(max(abs(A))));
 
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
 
         W = [E, F];
+
+
 
         
 

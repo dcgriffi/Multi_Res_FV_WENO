@@ -23,7 +23,7 @@ pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/R
     % ng_num: (1xn2d) Tracks num of neighbors for each node 
     % n_num:  (1xn2d) Tracks num of triagles for each node
     
-    % edge_num/ed2d: Number of edges (not sure why both)
+    % edge_num/ed2d: Number of edges 
     % edges: (2xedge_num) Tracks vertices for each edge
     % edge_tri : (2xedge_num) Tracks triangle/triangles associated to each edge
     % elem_edges: (3xe2d) Tracks edges associated to each triangle (numbered as in
@@ -886,37 +886,25 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         L(6) = 1/area_i*int_over_cell(f6,  i,nod_in_e2d,tri,xcoord,ycoord);
         
         
-        %Note: Could try again with QR Factorization
+       
         
-        %[Q,R] = qr(A);
-        %W = R\(Q');    %(A'*A)\A'
-        % 
-        % W = (A'*A)\(A');
-        % P =(A'*A)\(L');
-        % 
-        % mu = -L*P;
-        % E = W + (P*L*W)/mu;
-        % F = P/mu;
-        % 
-        % W = [E, F];
+        %   %Can also add scaling factor for condition number
+             %sc = 1/(m*max(max(abs(A))));
 
-
-        %Adding scaling factor for condition number
-        sc = 1/(m*max(max(abs(A))));
-
-        %Try again with QR Factorization
-        
-        %[Q,R] = qr(A);
-        %W = R\(Q');    %(A'*A)\A'
-        W = (sc*(A'*A))\(sc*A');
-        %P = R\(Q'*L'); %(A'*A)\(L');
-        P =(sc*(A'*A))\(L');
-        
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
-        
-        W = [E, F];    
+
+        W = [E, F];
+
+
+    
+
+
 end
 
 

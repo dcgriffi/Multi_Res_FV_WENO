@@ -554,21 +554,17 @@ function W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in
         L(5) = 1/area_i*int_over_cell(f5,  i,nod_in_e2d,tri,xcoord,ycoord);
         L(6) = 1/area_i*int_over_cell(f6,  i,nod_in_e2d,tri,xcoord,ycoord);
         
-        %Adding scaling factor for condition number
-        sc = 1/(m*max(max(abs(A))));
+         %   %Can also add scaling factor for condition number
+         %sc = 1/(m*max(max(abs(A))));
 
-        %Try again with QR Factorization
-        
-        %[Q,R] = qr(A);
-        %W = R\(Q');    %(A'*A)\A'
-        W = (sc*(A'*A))\(sc*A');
-        %P = R\(Q'*L'); %(A'*A)\(L');
-        P =(sc*(A'*A))\(L');
-        
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
-        
+
         W = [E, F];
 
 

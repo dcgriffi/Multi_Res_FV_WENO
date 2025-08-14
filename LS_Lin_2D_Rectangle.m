@@ -234,20 +234,18 @@ end
         L(3) = 1/area*(y_p^2 - y_m^2)*(x_p-x_m)/2;
         
         
-        %Try again with QR Factorization
-        
-        [Q,R] = qr(A);
-        W = R\(Q');    %(A'*A)\A'
-        W = (A'*A)\(A');
-        %P = R\(Q'*L'); %(A'*A)\(L');
-        P =(A'*A)\(L');
-        
+         %   %Can also add scaling factor for condition number
+         %sc = 1/(m*max(max(abs(A))));
+
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
-        
-        W = [E, F];
 
+        W = [E, F];
 
  end
 

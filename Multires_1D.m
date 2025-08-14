@@ -1,11 +1,11 @@
 %Multi-resolution WENO implementation in 1D (constrained) 
-    %%% Run pde = linear for order or pde = burgers for behavior around shock
+    %%% Run nonlinear = 0 for order or nonlinear = 1 for behavior around shock
 
 clear all;close all;format short e;
 
 Method = "multi-resolution WENO Scheme";
 order = 3; %Set desired error order (3 or 5)
-nonlinear = 1;
+nonlinear = 0;
 
 
 %r = 2; k = 3; m = 5; %
@@ -16,8 +16,8 @@ weights = [1/11, 10/11]; %
 %pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 
 %Uncomment the desired time
-t_final = 0.3; %Before shock
-%t_final = 2; %After shock
+%t_final = 0.3; %Before shock
+t_final = 2; %After shock
 
 %Comment or uncomment if you want the shock for T=2.
 avoid_shock = true; %(without shock)
@@ -95,10 +95,7 @@ for kk=1:length(n_array)
         %RK3
         u_hold = L(u_avg,weights,a,l,W,A,x,smoothness);
         u_hold = 3/4*u_avg + 1/4*L(u_hold,weights,a,l,W,A,x,smoothness);
-        %u_2 = 3/4*u_avg +1/4*u_1 + 1/4*dt*L(u_1,weights,a,l,W,A,x,smoothness);
         u_next = 1/3*u_avg + 2/3*L(u_hold, weights,a,l,W,A,x,smoothness);
-        %u_next = 1/3*u_avg + 2/3*u_2 + 2/3*dt*L(u_2, weights,a,l,W,A,x,smoothness);
-
 
         u_avg = u_next;
         t = t + dt;
@@ -306,19 +303,18 @@ for l = 1:k
     L(l) = (x_ghost(mod_n(i +1))^l - x_ghost(mod_n(i))^l)/(l * dx_ghost(mod_n(i)));
 end
 
-%Try again with QR Factorization
-q = 1/(m*max(max(abs(A))));
-[Q,R] = qr(A);
-W = q*R\(q*Q');    %(A'*A)\A'
-%W = ((q*A'*A))\(q*A');
-%P = R\(Q'*L'); %(A'*A)\(L');
-P =((q*A'*A))\(L');
+ %   %Can also add scaling factor for condition number
+         %sc = 1/(m*max(max(abs(A))));
 
-mu = -L*P;
-E = W + (P*L*W)/mu;
-F = P/mu;
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
+        mu = -L*P;
+        E = W + (P*L*W)/mu;
+        F = P/mu;
 
-W = [E, F];
+        W = [E, F];
 end
 
 function A = stiffness_weight_matrix(k,m,r,i,x,W_i);

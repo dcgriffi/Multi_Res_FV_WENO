@@ -3,14 +3,14 @@
 
 clear all; close all;
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
-pth = '';
+pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
+%pth = '';
 
 %Uncomment the desired time
-t_final = 0.3; %Before shock 1D
+%t_final = 0.3; %Before shock 1D
 %t_final =2; %After shock 1D
 %t_final = 0.3/2; %Before shock 2D
-%t_final = 2/2; %After shock 2D
+t_final = 2/2; %After shock 2D
 
 avoid_shock = true;
 
@@ -24,8 +24,8 @@ end
 
 p = 3;
 
-%pde = "burgers";
-pde = "linear";
+pde = "burgers";
+%pde = "linear";
 alpha = 1/3; beta = 2/3; 
 u_initial = @(x,y) alpha + beta*sin((x+y));
 %u_initial = @(x,y) alpha + beta*sin((x));
@@ -145,7 +145,7 @@ yL = xL; yR = xR;
             title(sprintf("Slice of %s at y = 0 from %s with nX = ", [variable_name Method]) + nX)
             legend('Exact','Approximate')
             
-           % saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_x.jpg',pth,t_final*2),'jpeg')
+            saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_x.jpg',pth,t_final*2),'jpeg')
 
             
             fig_num =4;
@@ -156,7 +156,7 @@ yL = xL; yR = xR;
             title(sprintf("Slice of %s at x = 0 from %s with nX = ", [variable_name Method]) + nY)
             legend('Exact','Approximate')
 
-          %  saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_y.jpg',pth,t_final*2),'jpeg')
+            saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_y.jpg',pth,t_final*2),'jpeg')
 
         end
     
@@ -180,13 +180,13 @@ yL = xL; yR = xR;
             [X,Y] = meshgrid(x_avg,y_avg);
             surf(X,Y,v_array);
             title(sprintf("2D Plot of multiresolution results for 1/3 + 2/3 sin(x + y)"))
-            %saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_approx.jpg',pth,t_final*2),'jpeg')
+            saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_approx.jpg',pth,t_final*2),'jpeg')
 
             fig_num = fig_num + 1;
             figure(fig_num)
             surf(X,Y,u_exact_array);
             title(sprintf("2D Plot of exact solution for 1/3 + 2/3 sin(x + y)"))
-            %saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_exact.jpg',pth,t_final*2),'jpeg')
+            saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_plot_exact.jpg',pth,t_final*2),'jpeg')
         end
    end
 
@@ -195,7 +195,7 @@ yL = xL; yR = xR;
     fig_num = 5; err_name = "L2 Error";
     T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
     order_plot(L2_Error_quadratic,fig_num,Method,p,DX,err_name, k);
-%    saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_convergence_plot.jpg',pth,t_final*2),'jpeg')
+    saveas(fig_num, sprintf('%s/2D/rectangle_multres_tFinal_%d_convergence_plot.jpg',pth,t_final*2),'jpeg')
 
 
     
@@ -581,27 +581,21 @@ function W = rectangle_condensed_constrained_weight_matrix(k,m,i,coord_array,ste
         L(5) = 1/area*(x_p^3 - x_m^3)*(y_p-y_m)/3;
         L(6) = 1/area*(y_p^3 - y_m^3)*(x_p-x_m)/3;
         
-        
-        %Try again with QR Factorization
-        
-        % [Q,R] = qr(A);
-        % W = R\(Q');    %(A'*A)\A'
-        % %W = (A'*A)\(A');
-        % %P = R\(Q'*L'); %(A'*A)\(L');
-        % P =(A'*A)\(L');
+          
+        %   %Can also add scaling factor for condition number
+             %sc = 1/(m*max(max(abs(A))));
 
-        q = 1/(m*max(max(abs(A))));
-        [Q,R] = qr(A);
-        W = q*R\(q*Q');    %(A'*A)\A'
-        %W = ((q*A'*A))\(q*A');
-        %P = R\(Q'*L'); %(A'*A)\(L');
-        P =((q*A'*A))\(L');
-        
+        %Solving for W with QR factorization
+        [Q,R] = qr(A,0);
+        W = R\(Q');          %(A'*A)\A'
+        P = R \ (R' \ L');   %(A'*A)\(L');
         mu = -L*P;
         E = W + (P*L*W)/mu;
         F = P/mu;
-        
+
         W = [E, F];
+
+
 
 
 end
