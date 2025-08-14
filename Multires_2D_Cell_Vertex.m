@@ -46,9 +46,9 @@ avoid_shock = true;
 p = 3;
 
 
-%approach = "standard";
+approach = "standard";
 %approach = "beta_1_0";
-approach = "single_beta_ls"; 
+%approach = "single_beta_ls"; 
 %approach = "dir_deriv_sten_1";
 %approach = "dir_deriv_sten_2";
 

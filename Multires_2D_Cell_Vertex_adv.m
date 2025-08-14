@@ -1,5 +1,5 @@
 %Multi-resolution WENO implementation for advection with cell-vertex mesh (constrained) 
-    %%% Update pth, choose I.C., linear smoothness indicator approach, and
+    %%% Update pth, choose I.C., pick linear smoothness indicator approach, and
     %%% tune epsilon
 
 
