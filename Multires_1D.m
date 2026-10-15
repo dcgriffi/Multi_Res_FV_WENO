@@ -13,7 +13,6 @@ r = 1; k = 3; m = 3; %
 
 weights = [1/11, 10/11]; %
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 
 %Uncomment the desired time
 %t_final = 0.3; %Before shock

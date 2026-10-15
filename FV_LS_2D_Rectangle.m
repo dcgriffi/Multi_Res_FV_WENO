@@ -3,7 +3,6 @@
 
 clear all; close all;
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 pth = '';
 %Uncomment the desired time
 %t_final = 2/2; %After shock

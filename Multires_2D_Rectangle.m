@@ -3,7 +3,8 @@
 
 clear all; close all;
 
-pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
+pth = fullfile(pwd, 'Results');  % figures/tables are saved to ./Results/2D
+if ~exist(fullfile(pth, '2D'), 'dir'), mkdir(fullfile(pth, '2D')); end
 %pth = '';
 
 %Uncomment the desired time

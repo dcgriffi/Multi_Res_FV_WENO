@@ -6,7 +6,8 @@
 clear all; close all;
 
 %Update the path to match your system
-pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
+pth = fullfile(pwd, 'Results');  % figures/tables are saved to ./Results/2D
+if ~exist(fullfile(pth, '2D'), 'dir'), mkdir(fullfile(pth, '2D')); end
 
     %Stored Info Guide: 
     % n2d: Number of nodes/control volumes/ triangle vertices (nx x ny)

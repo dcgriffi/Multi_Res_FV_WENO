@@ -11,3 +11,6 @@
 *.jpg
 *.png
 
+
+# script output
+Results/

@@ -3,7 +3,6 @@
 
 clear all; close all;
 
-%pth = '/Users/chloegriffin/Brown Dropbox/Chloe Griffin/Research 2024/AWI Codes/Results';
 
     %Stored Info Guide: 
     % n2d: Number of nodes/control volumes/ triangle vertices (nx x ny)
