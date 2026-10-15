@@ -1,6 +1,6 @@
 function u = solveBurgers2(alpha, beta, t, x)
 
-%Chloe Griffin HW2 CFD - Using change of variables, method of
+%Using change of variables, method of
 %characteristics and Newton's iteration to solve Burger's equation with
 %general periodic initial condition
 

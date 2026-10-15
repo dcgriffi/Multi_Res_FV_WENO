@@ -14,3 +14,6 @@
 
 # script output
 Results/
+
+# macOS
+.DS_Store

@@ -20,7 +20,7 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
 - **FV_LS_*.m**  
   These contain the quadratic least squares reconstructions applied within a finite volume framework. They illustrate the formation of oscillations near discontinuous initial conditions or shock regions and third order convergence in smooth regions.
 
-- **Multires_*.m / .asv**  
+- **Multires_*.m**  
   These files implement the multi-resolution algorithm for hyperbolic conservation laws:  
   - *Multires_1D.m*: 1D cases for general flux function \( f \).  
   - *Multires_2D_Rectangle.m*: 2D rectangular grid cases.  
@@ -30,7 +30,6 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
 - **Mesh and Utility Functions:**  
   - `gen_reg_tri_mesh.m`: Generates regular triangular meshes.  
   - `get_fv_arrays.m`: Prepares finite volume grid arrays and connectivity.  
-  - `integQuad.m`: Performs quadrature integrations.  
   - `lgwt.m`: Computes Legendre-Gauss nodes and weights.
   - `solveBurgers2.m`: Solves Burgers' equation as a test case.  
 
