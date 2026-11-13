@@ -15,12 +15,12 @@ weights = [1/11, 10/11]; %
 
 
 %Uncomment the desired time
-%t_final = 0.3; %Before shock
-t_final = 2; %After shock
+t_final = 0.3; %Before shock
+%t_final = 2; %After shock
 
 %Comment or uncomment if you want the shock for T=2.
-avoid_shock = true; %(without shock)
-%avoid_shock = false; %(with shock)
+%avoid_shock = true; %(without shock)
+avoid_shock = false; %(with shock)
 
 %Classic, q_k smoothness (1) or multi-res smoothness (2) 
 smoothness = 1;
@@ -35,7 +35,7 @@ xL = 0; xR = 2*pi;
 x0 = linspace(pi/400,pi-pi/400,3657); 
 
 %Range of points on x for convergence study
-n_array=[20,40,80,160,320]; 
+n_array=[20,40,80,160,320,640]; 
 % n_array=[600,700,800]; 
 %n_array=[50]; 
 
@@ -286,20 +286,24 @@ dx_ghost = x_ghost(2:end) - x_ghost(1:end-1);
 
 mod_n = @(i) i + k - 1;
 
-%Build matrix for least squares
-A = zeros(m,k);
+%Center the least squares on cell i and scale by its width.
+xc = (x_ghost(mod_n(i)) + x_ghost(mod_n(i+1)))/2;
+hc = dx_ghost(mod_n(i));
+z_ghost = (x_ghost - xc)/hc;
+dz_ghost = dx_ghost/hc;
 
+%Build matrix for least squares (cell averages of 1, z, z^2)
+A = zeros(m,k);
 for l = 1:k
     for j = 1:m
-        A(j,l) = (x_ghost(mod_n(i - r + j))^l - x_ghost(mod_n(i - r + j - 1))^l)/(l * dx_ghost(mod_n(i - r + j - 1)));
+        A(j,l) = (z_ghost(mod_n(i - r + j))^l - z_ghost(mod_n(i - r + j - 1))^l)/(l * dz_ghost(mod_n(i - r + j - 1)));
     end
 end
-
 
 %Build L matrix
 L = zeros(1,k);
 for l = 1:k
-    L(l) = (x_ghost(mod_n(i +1))^l - x_ghost(mod_n(i))^l)/(l * dx_ghost(mod_n(i)));
+    L(l) = (z_ghost(mod_n(i +1))^l - z_ghost(mod_n(i))^l)/(l * dz_ghost(mod_n(i)));
 end
 
  %   %Can also add scaling factor for condition number
@@ -314,6 +318,11 @@ end
         F = P/mu;
 
         W = [E, F];
+
+T = [1, -xc/hc, xc^2/hc^2;
+     0,  1/hc, -2*xc/hc^2;
+     0,  0,     1/hc^2];
+W = T*W;
 end
 
 function A = stiffness_weight_matrix(k,m,r,i,x,W_i);
