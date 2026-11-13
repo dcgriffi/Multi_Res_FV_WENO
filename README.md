@@ -15,7 +15,9 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
 ## File Structure and Description
 
 - **LS_*.m**  
-  These scripts implement constrained least squares reconstructions—both quadratic and linear—for scalar functions. They serve as the building blocks for the multi-resolution algorithm.
+  These scripts implement constrained least squares reconstructions—both quadratic and linear—for scalar functions. They serve as the building blocks for the multi-resolution algorithm.  
+  - *LS_1D_Unconstrained.m*: 1D unconstrained quadratic least squares on a three-cell stencil. Checks that the cell averages are matched on a non-uniform grid and shows third order convergence for sin(2πx).  
+  - *LS_1D_Constrained.m*: 1D constrained quadratic least squares on a five-cell stencil, matching the target cell average exactly. Includes a worked example on 10 cells and a convergence test for sin(2πx).
 
 - **FV_LS_*.m**  
   These contain the quadratic least squares reconstructions applied within a finite volume framework. They illustrate the formation of oscillations near discontinuous initial conditions or shock regions and third order convergence in smooth regions.
@@ -44,6 +46,22 @@ The project focuses on solving hyperbolic conservation laws using a multi-resolu
 ## Usage
 
 To run a test case, start with one of the *Multires* scripts (e.g., `Multires_2D_Cell_Vertex_adv.m`) to observe the solver behavior on advection problems. Modify the parameters and initial conditions inside these scripts to explore different scenarios.
+
+<!--
+## Reproducing the thesis results
+
+The scripts below produce the published 1D results. TODO: add the 2D cases and settings. Set the options at the top of each script as listed. Figures and tables are written to a `Results/` folder in the working directory, which is not tracked by git.
+
+| Result | Script | Settings |
+|---|---|---|
+| Unconstrained least squares, convergence | `LS_1D_Unconstrained.m` | `test = "convergence"` |
+| Constrained least squares, convergence | `LS_1D_Constrained.m` | `test = "convergence"` |
+| Constrained least squares, worked example (figure and table) | `LS_1D_Constrained.m` | `test = "example"` |
+| Burgers' equation before the shock | `Multires_1D.m` | `t_final = 0.3`, `avoid_shock = false`, `n_array = [20,40,80,160,320,640]` |
+| Burgers' equation away from the shock | `Multires_1D.m` | `t_final = 2`, `avoid_shock = true`, `n_array = [20,40,80,160,320,640]` |
+
+`Multires_1D.m` saves the solution plot for N = 160 to `Results/1D/`.
+-->
 
 ## Requirements
 
