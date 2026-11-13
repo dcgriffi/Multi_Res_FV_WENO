@@ -3,6 +3,9 @@
 
 clear all;close all;format short e;
 
+pth = fullfile(pwd, 'Results');  % figures are saved to ./Results/1D
+if ~exist(fullfile(pth, '1D'), 'dir'), mkdir(fullfile(pth, '1D')); end
+
 Method = "multi-resolution WENO Scheme";
 order = 3; %Set desired error order (3 or 5)
 nonlinear = 0;
@@ -131,16 +134,23 @@ for kk=1:length(n_array)
 
 
     %Plotting at desired time
-    variable_name = "Burger's";
+       %Plotting at desired time (publication style: exact solution as a red
+    %line, cell averages as green symbols, no title; details go in the
+    %LaTeX caption). Saves a vector PDF to Results/1D.
     if N == 160
-        figure(kk)
-        plot(x_avg,u_avg,'.-')
-        hold on
-        plot(x_avg, u_ref, 'ro')
-        title(sprintf("Plot of %s from %s with number of points ", [variable_name Method]) + N)
-        legend('Approximate','Exact')
-
-        %saveas(kk, sprintf('%s/1D/constrained_multres_tFinal_%d_smoothness_%d_plot.jpg',pth,t_final,smoothness),'jpeg')
+        xf = linspace(xL, xR, 2000);
+        uf = arrayfun(@(xx) solveBurgers2(alpha, beta, t_final, xx), xf);
+        fig = figure(kk);
+        set(fig, 'Units', 'inches', 'Position', [1 1 5.5 4.0], 'Color', 'w');
+        plot(xf, uf, 'r-', 'LineWidth', 1.5); hold on
+        plot(x_avg, u_avg, 'o', 'Color', [0 0.5 0], 'MarkerSize', 4, 'LineWidth', 1);
+        xlim([xL xR]); ylim([-0.45 1.1]);
+        xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
+        xlabel('x'); ylabel('u');
+        legend({'Exact','Multi-resolution WENO'}, 'Location', 'southwest', 'Box', 'off');
+        set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
+        exportgraphics(fig, fullfile(pth, '1D', sprintf('burgers1d_t%s_N%d.pdf', ...
+            strrep(num2str(t_final), '.', 'p'), N)), 'ContentType', 'vector');
     end
 end
 
