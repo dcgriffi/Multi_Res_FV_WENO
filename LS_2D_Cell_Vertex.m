@@ -1,271 +1,150 @@
-%Convergence test for LS 3rd order polynomials with uniform cell-vertex mesh (scaled, constrained) 
+%LS_2D_Cell_Vertex.m
+%   Constrained least squares reconstruction of a quadratic polynomial
+%   (k = 6 coefficients: 1, x, y, xy, x^2, y^2) from cell averages on the
+%   median-dual control volumes of a regular triangular mesh. The stencil
+%   is the target control volume and its six neighbors (m = 7). The
+%   polynomial matches the target cell average exactly and the remaining
+%   cells in the least squares sense.
+%
+%   test = "example"     : coarse mesh of [0,1]^2, f = sin(2*pi*(x+y)). For
+%                          one target vertex, prints the largest difference
+%                          of the cell averages of p and f on the stencil and
+%                          saves a figure of the differences on the control
+%                          volumes to Results/LS_2D/ls_hex_example.pdf.
+%   test = "convergence" : L2 error of the reconstruction of sin(2*pi*(x+y))
+%                          on meshes of [0,1]^2 with spacing h = 1/n.
+%                          Expected order: 3.
+%
+%   The least squares system is built in local coordinates centered at the
+%   vertex and scaled by sqrt(area), then mapped back to 1, x, y, ...
+%   Mesh routines (gen_reg_tri_mesh.m, get_mesh_sten_info) are modified from
+%   code by Sergey Danilov.
 
+clear; close all;
 
-clear all; close all;
-format shorte;
+test = "example";   % "example" or "convergence"
 
-    %Stored Info Guide: 
-    % n2d: Number of nodes/control volumes/ triangle vertices (nx x ny)
-    % e2d: Number of triangles
+k = 6; m = 7;            % quadratic polynomial; vertex and its six neighbors
+f_exact = @(x,y) sin(2*pi*(x+y));
+xL = 0; xR = 1;
 
-    % xcoord: (1xn2d) x-coordinates of control volume center/triangle vertices
-    % ycoord  (1xn2d) y-coordinates of control volume center/triangle vertices
-    
-    % tri: (3xe2d) Tracks three vertices/control volumes associated to each triangle (used
-            % for plotting mesh)
-    % nod_in_e2d: (6xn2d) Tracks triangles for each node (unordered)
-    % nghbr_n2d:  (7xn2d) Tracks neighboring nodes for each node (unordered
-            % for now)
-    % ng_num: (1xn2d) Tracks num of neighbors for each node 
-    % n_num:  (1xn2d) Tracks num of triagles for each node
-    
-    % edge_num/ed2d: Number of edges (not sure why both) (Not sure if
-             % triangle or control volume edges now)
-    % edges: (2xedge_num) Tracks vertices for each edge
-    % edge_tri : (2xedge_num) Tracks triangle/triangles associated to each edge
-    % elem_edges: (3xe2d) Tracks edges associated to each triangle (numbered as in
-    %      edges)
+if test == "example"
+    n_array = 6;
+else
+    n_array = [10,20,40,80,160];
+end
+h_array = zeros(length(n_array),1); L2_Error = zeros(length(n_array),1);
 
-    % edge_dxdy : (2xedge_num) Gives dx and dy for each edge (from v1 to v2)
-    % edge_cross_dxdy: (4xedge_num) Gives cross-distances for the edge
-    % (from midpoint to centroid of triangle)
+for kk = 1:length(n_array)
+    n = n_array(kk); h = (xR - xL)/n; h_array(kk) = h;
 
-    %enodes : tri(:,n) Nodes of triangle for a particular control volume
- 
-   %n_array = [4,8,16,32,64,128];
-   %n_array = [5,9,17,33,65,129,257];
-   %n_array = [33,65,129,257];
-   %n_array = [11,21,41,81,161];
-   %n_array = [129,257];
+    %Regular triangular mesh of [0,1]^2 padded with two layers of vertices
+    x = (xL:h:xR); y = x;
+    x = [x(1) - 2*h, x(1) - h, x, x(end) + h, x(end) + 2*h];
+    y = [y(1) - 2*h, y(1) - h, y, y(end) + h, y(end) + 2*h];
+    N = n + 5;                                   % vertices per direction
+    [tri, nodnum, xcoord, ycoord, e2d, n2d] = gen_reg_tri_mesh(x,y);
+    [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d);
 
-   n_array = [20,40,80,160];
+    %Vertices with complete control volumes, and those whose whole stencil
+    %has complete control volumes (where we reconstruct)
+    all_v = reshape(1:N*N, N, N);
+    inner_v_vec = reshape(all_v(2:end-1, 2:end-1), [], 1);
+    ind_vec = reshape(all_v(3:end-2, 3:end-2), [], 1);
 
-   Method = "Least Squares Poly Approx"; p = 3;
-        
+    cell_avg = build_cell_avg_vec(inner_v_vec, f_exact, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
 
-  %Preallocate arrays for memory
-    DX = zeros(length(n_array),1); dt = zeros(length(n_array),1); 
-    L2_Error_quadratic = zeros(length(n_array),1); L1Error = zeros(length(n_array),1); 
-    L2_Error_linear = zeros(length(n_array),1);
-    LinfError= zeros(length(n_array),1); err = zeros(length(n_array),1); 
-
-  n_set_array = n_array;
-
-  xL = 0; xR = 2*pi;
-  yL = 0; yR = 2*pi;
-
-
-  for kk = 1:length(n_array)
-  n = n_set_array(kk); 
-  h=(xR-xL)/n;
-  x = (xL:h:xR);
-  y = (yL:h:yR); 
-
-  dx  = x(2:end) - x(1:end-1);
-  dy  = y(2:end) - y(1:end-1);
-
-  %Will update later for nonuniform case
-  % x = [x(1) - 2*h, x(1) - h, x, x(end) + h, x(end) + 2*h];
-  % y = [y(1) - 2*h, y(1) - h, y, y(end) + h, y(end) + 2*h ];
-
-  x = [x(1) - dx(end) - dx(end - 1), x(1) - dx(end), x, x(end) + h, x(end) + dx(1) + dx(2)];
-  y = [y(1) - dy(end) - dy(end - 1), y(1) - dx(end), y, y(end) + h, y(end) + dy(1) + dy(2)];
-        
- N = n + 5;
- DX(kk)=(xR-xL)/N;
-% 
-% nx = length(x)-1;
-% ny = length(y)-1;
-% N = (nx)*(ny);
-
- alpha = 1/3; beta = 2/3;
- u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
-
-
- % N = 8;
- % 
-  %x = 1:1:8;
-  %y = 1:1:8;
-
- [tri, nodnum, xcoord, ycoord, e2d, n2d] = gen_reg_tri_mesh(x,y);
-
- [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d);
-
- bound_tri_vec = 1:N*N;
-
- bound_tri_array = reshape(bound_tri_vec, N,N);
- inner_v_array = bound_tri_array(2:end - 1, 2:end - 1);
- ind_array = inner_v_array(2:end - 1, 2:end - 1);
-
- inner_v_vec = reshape(inner_v_array, (N-2)*(N-2),1);
- ind_vec = reshape(ind_array, (N-4)*(N-4),1);
-
- n_steps = (N-4)*(N-4);
-
- %Build inner ind_array (get reconstruction of these)
-
- cell_avg = build_cell_avg_vec(inner_v_vec, u_initial, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
- 
- cell_avg_array = reshape(cell_avg, N, N);
-
- v_array = cell_avg_array(3:end - 2, 3:end - 2);
- v_vec = reshape(v_array, N-4,N-4); %This is what I would actually want to plot and update in time stepping
-
- if n+1== n_array(2)
- %Plot just mesh
- figure(1)
-trimesh(tri', xcoord', ycoord', zeros(N*N,1),"EdgeColor","c"); 
-view(2)
-title("Plot of Mesh with nX = " + N)
-
- %Plot cell_avg_array
- figure(2)
- trimesh(tri', xcoord, ycoord, cell_avg_array)
- title("Plot of Cell Averages with nX = " + N)
- end
-
- k = 6; m = 7;
-
- W = zeros(k, m+1, n_steps);
- for ii = 1:n_steps
-   i = ind_vec(ii);
-   W(:,:,ii) = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
- end
-
-  C = zeros(n_steps,k);
-  %Build coefficient matrix using weight matrix
-  for ii = 1:n_steps
-    i = ind_vec(ii);
-    stencil = nghbr_n2d(:,i);
-    d = zeros(m+1,1);
-    for j = 1:m
-        cell = stencil(j);
-        d(j) = cell_avg(cell);
+    if test == "example"
+        i = all_v(ceil(N/2), ceil(N/2));        % target vertex near the center
+        stencil = nghbr_n2d(:,i);
+        W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
+        C = W*[reshape(cell_avg(stencil(1:m)), [], 1); -cell_avg(i)];
+        p = @(xx,yy) C(1) + C(2)*xx + C(3)*yy + C(4)*xx.*yy + C(5)*xx.^2 + C(6)*yy.^2;
+        p_avg = build_cell_avg_vec(inner_v_vec, p, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
+        d = p_avg - cell_avg;
+        fprintf('Largest |p_avg - f_avg| on the stencil: %.3e\n', max(abs(d(stencil(1:m)))));
+        pth = fullfile(pwd, 'Results', 'LS_2D');
+        if ~exist(pth, 'dir'), mkdir(pth); end
+        plot_cells = reshape(all_v(4:end-3, 4:end-3), [], 1);   % drop one outer layer for the figure
+        plot_hex_grid(d, plot_cells, i, stencil(1:m), nod_in_e2d, tri, xcoord, ycoord, ...
+            fullfile(pth, 'ls_hex_example.pdf'));
+        return
     end
-    d(m+1) = -cell_avg(i);
 
-    C(ii,:) = W(:,:,ii)*d;
-  end
-
-
-  ref_avg = build_ref_array(C,area,n_steps, ind_vec,nod_in_e2d,tri,xcoord,ycoord,n2d);
-     
-  ref_avg_array = reshape(ref_avg,N,N);
-
-
-
-  global_L2_quadratic = global_L2_error(C,u_initial,n_steps,ind_vec,nod_in_e2d,tri,xcoord,ycoord);
-
-  %uDif = cell_avg_array(4:end - 3, 4:end -3) - ref_avg_array(4:end - 3, 4:end - 3);
-
-  % global_L2_quadratic = (1/(n_steps))*sum(sum(abs(uDif)).^2);
-  % 
-  % %global_L2_quadratic = 
-   L2_Error_quadratic(kk)= (global_L2_quadratic)^(1/2);
-
-  %Add visualization of least square result
-   
-     if n+1== n_array(end - 1)
-     ref_avg = build_ref_array(C,area,n_steps, ind_vec,nod_in_e2d,tri,xcoord,ycoord,n2d);
-     
-     ref_avg_array = reshape(ref_avg,N,N);
-     figure(3)
-     trimesh(tri', xcoord, ycoord, ref_avg_array)
-     title("Plot of Least Square Cell Averages with nX = " + N)
-
-     check_array = abs(cell_avg_array - ref_avg_array);
-     check_array  = check_array(3:end - 2, 3:end - 2);
-     check = max(max(check_array))
-     end
-
-
-
-
-
-     %Add second visualization of least square result: Plot the error on
-     %the grid, for a single C value
-
-     if n+1== n_array(1)
-
-     %Cell of interest = cell_i
-
-    % cell_i = 28; %second from bottom and second from left %Qu:How to map from full array to ind_vec
-    % cell_i = 29; %second from bottom and second from left %Qu:How to map from full array to ind_vec
-
-      %ii = find(ind_vec==cell_i);
-
-      ii = 6;
-
-      f = @(x,y) C(ii,1) + C(ii ,2)*x + C(ii ,3)*y+ C(ii ,4)*x.*y + C(ii ,5)*x.^2 + C(ii ,6)*y.^2;
-        
-      fix_avg = build_cell_avg_vec(inner_v_vec, f, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-     
-      fix_avg_array = reshape(fix_avg,N,N);
-      figure(4)
-      trimesh(tri', xcoord, ycoord, fix_avg_array)
-      title("Plot of Fixed Poly at " + ii + " with nX = " + N)
-
-      fix_avg_array = reshape(fix_avg,N,N);
-      figure(5)
-      trimesh(tri', xcoord, ycoord, cell_avg_array)
-      title("Plot of Correct Cell Avg at " + ii + " with nX = " + N)
-
-      check_array = abs(cell_avg_array - fix_avg_array);
-      check_array  = check_array(3:end - 2, 3:end - 2)
-      %check = max(max(check_array))
-      end
-        
-
-
-  end
-
-  
-  err_name = "L2 Error";
-  T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
-  order_plot(L2_Error_quadratic, Method,p,DX,err_name, k);
-
-
-function global_L2_Error = global_L2_error(C,exact_sol,n_steps,ind_vec,nod_in_e2d,tri,xcoord,ycoord)
-    global_L2_Error = 0;
-    for jj = 1:n_steps
-        cell = ind_vec(jj);
-        %Obtain approx function at each cell (change if increase k)
-        
-        u_cell = @(x,y) C(jj ,1) + C(jj ,2)*x + C(jj ,3)*y+ C(jj ,4)*x.*y + C(jj ,5)*x.^2 + C(jj ,6)*y.^2;
-
-        %Obtain local error estimate with quadrature
-        interior= @(x,y) (u_cell(x,y) - exact_sol(x,y)).^2;
-        local_error =int_over_cell(interior,cell,nod_in_e2d,tri,xcoord,ycoord); %Obtain integral via  Legendre-Gauss quadrature
-        global_L2_Error = global_L2_Error + local_error;
+    %Reconstruct in every vertex of ind_vec and integrate the squared error
+    err2 = 0;
+    for ii = 1:length(ind_vec)
+        i = ind_vec(ii);
+        stencil = nghbr_n2d(:,i);
+        W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area);
+        C = W*[reshape(cell_avg(stencil(1:m)), [], 1); -cell_avg(i)];
+        p = @(xx,yy) C(1) + C(2)*xx + C(3)*yy + C(4)*xx.*yy + C(5)*xx.^2 + C(6)*yy.^2;
+        err2 = err2 + int_over_cell(@(xx,yy) (p(xx,yy) - f_exact(xx,yy)).^2, i, nod_in_e2d, tri, xcoord, ycoord);
     end
+    L2_Error(kk) = sqrt(err2);
 end
 
-function order_plot(L2Error,Method,p,dx,err_name, k)
-    figure(6)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with K = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
+order = [NaN; log(L2_Error(1:end-1)./L2_Error(2:end))./log(h_array(1:end-1)./h_array(2:end))];
+disp(table(n_array(:), L2_Error, order, 'VariableNames', {'n','L2 error','L2 order'}))
+
+
+function plot_hex_grid(d, cells, i, stencil, nod_in_e2d, tri, xcoord, ycoord, fname)
+    %Median-dual control volumes of the vertices in cells, with the value of
+    %d in each. Stencil cells are shaded light gray and their outer boundary
+    %is outlined in red; the target vertex i is shaded darker. No title;
+    %details go in the LaTeX caption.
+    fig = figure('Units','inches','Position',[1 1 5.5 5.0],'Color','w'); hold on
+    E = zeros(0,4);                               % edges of the stencil cells
+    for c = cells(:)'
+        P = dual_cell_polygon(c, nod_in_e2d, tri, xcoord, ycoord);
+        if c == i
+            col = [0.75 0.75 0.75];
+        elseif any(stencil == c)
+            col = [0.92 0.92 0.92];
+        else
+            col = [1 1 1];
+        end
+        patch(P(:,1), P(:,2), col, 'EdgeColor', [0.5 0.5 0.5]);
+        text(xcoord(c), ycoord(c), sprintf('%.1e', d(c)), 'HorizontalAlignment','center', 'FontSize', 9);
+        if any(stencil == c), E = [E; P, circshift(P, -1)]; end %#ok<AGROW>
+    end
+    %Outer boundary of the stencil: edges that belong to only one stencil cell
+    key = round(sort([E(:,1)+1i*E(:,2), E(:,3)+1i*E(:,4)], 2, 'ComparisonMethod', 'real')*1e8);
+    [~, ~, g] = unique([real(key), imag(key)], 'rows');
+    once = accumarray(g, 1) == 1;
+    for q = find(once(g))'
+        plot([E(q,1) E(q,3)], [E(q,2) E(q,4)], 'r-', 'LineWidth', 2);
+    end
+    axis equal; axis off;
+    exportgraphics(fig, fname, 'ContentType', 'vector');
 end
 
-function T = order_table(dx,n_array, L2Error, err_name)
-    L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
-    %Format table
-    fractions = arrayfun(@(x) sprintf('1/%d', x), n_array, 'UniformOutput', false);
-    T = table(fractions', L2Error(:),[0;L2Order(:)], ...
-        'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
-    disp(T)
+function P = dual_cell_polygon(v, nod_in_e2d, tri, xcoord, ycoord)
+    %Vertices of the median-dual control volume of vertex v: the centroids
+    %of the surrounding triangles and the midpoints of the edges at v,
+    %ordered by angle around v.
+    pts = [];
+    for t = nod_in_e2d(:,v)'
+        if t == 0, continue; end
+        vt = tri(:,t);
+        pts = [pts; mean(xcoord(vt)), mean(ycoord(vt))]; %#ok<AGROW>
+        for w = vt(vt ~= v)'
+            pts = [pts; (xcoord(v) + xcoord(w))/2, (ycoord(v) + ycoord(w))/2]; %#ok<AGROW>
+        end
+    end
+    pts = uniquetol(pts, 1e-12, 'ByRows', true);
+    [~, o] = sort(atan2(pts(:,2) - ycoord(v), pts(:,1) - xcoord(v)));
+    P = pts(o,:);
 end
-
 
 function W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area)
 
     
-        f1 = @(x,y) 1;    f2 = @(x,y) x;       f3 = @(x,y) y; 
-        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2; f6 = @(x,y) y.^2;
+        %Center the least squares on vertex i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = xcoord(i); yc = ycoord(i); s = sqrt(area(i));
+        f1 = @(x,y) 1;    f2 = @(x,y) (x-xc)/s;       f3 = @(x,y) (y-yc)/s; 
+        f4 = @(x,y) ((x-xc)/s).*((y-yc)/s); f5 = @(x,y) ((x-xc)/s).^2; f6 = @(x,y) ((y-yc)/s).^2;
          %Build matrix for least squares
         A = zeros(m,k);
         for jj = 1:m %j is cell, jj is index
@@ -303,6 +182,12 @@ function W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in
 
         W = [E, F];
 
+        %Map coefficients of 1, z, w, zw, z^2, w^2 (z = (x-xc)/s, w = (y-yc)/s)
+        %back to coefficients of 1, x, y, xy, x^2, y^2, so the rest of the
+        %code is unchanged.
+        W = scaled_to_absolute_2d(xc,yc,s)*W;
+
+
 
 end
 
@@ -314,17 +199,6 @@ function cell_avg = build_cell_avg_vec(inner_v_vec,f, tri, nod_in_e2d, n2d, e2d,
 
         cell_int = int_over_cell(f,i,nod_in_e2d,tri,xcoord,ycoord);
         cell_avg(i) = cell_int/area(i);
-    end
-end
-
-
-function ref_avg = build_ref_array(C,area,n_steps, ind_vec,nod_in_e2d,tri,xcoord,ycoord,n2d)
-    ref_avg = NaN(1,n2d);
-    for ii = 1:n_steps
-        i = ind_vec(ii);
-        f = @(x,y) C(ii,1) + C(ii ,2)*x + C(ii ,3)*y+ C(ii ,4)*x.*y + C(ii ,5)*x.^2 + C(ii ,6)*y.^2;
-        cell_int = int_over_cell(f,i,nod_in_e2d,tri,xcoord,ycoord);
-        ref_avg(i) = cell_int/area(i);
     end
 end
 
@@ -390,48 +264,6 @@ end
 result = result *J/6;
 
 end
-
-
-function mass_m = generate_mass_matrix(nghbr_n2d, n2d, e2d,elem_area,tri,ng_num)
-  mass_m=zeros(size(nghbr_n2d));
-  aux=zeros([1,n2d]);
-  for j=1:e2d,
-      enodes=tri(:,j);
-      for n=1:3,
-      row=enodes(n);
-      cc=ng_num(row);
-      aux(nghbr_n2d(1:cc,row))=1:cc;
-         for m=1:3,
-            col=enodes(m);
-	    pos=aux(col);
-	    mass_m(pos,row)=mass_m(pos,row)+0.25*elem_area(j)/3.0;
-	    if m==n,  
-            mass_m(pos,row)=mass_m(pos,row)+0.25*elem_area(j)/3.0;
-	    end;
-	  end;   
-       end;
-  end;     
-
-    % correct mass matrix so that it agrees with nghbr_n2d 
-  mass_m=zeros(size(nghbr_n2d));
-  aux=zeros([1,n2d]);
-  for j=1:e2d,
-      enodes=tri(:,j);
-      for n=1:3,
-      row=enodes(n);
-      cc=ng_num(row);
-      aux(nghbr_n2d(1:cc,row))=1:cc;
-         for m=1:3,
-            col=enodes(m);
-	    pos=aux(col);
-	    mass_m(pos,row)=mass_m(pos,row)+0.25*elem_area(j)/3.0;
-	    if m==n,  
-            mass_m(pos,row)=mass_m(pos,row)+0.25*elem_area(j)/3.0;
-	    end;
-	  end;   
-      end;
-  end;
- end
 
 
  function [nod_in_e2d, nghbr_n2d, elem_area, area, n_num, ng_num, edges, ed2d] = get_mesh_sten_info(tri, xcoord, ycoord, e2d, n2d)
@@ -602,6 +434,13 @@ function mass_m = generate_mass_matrix(nghbr_n2d, n2d, e2d,elem_area,tri,ng_num)
 
 end
 
-
-
-
+function T = scaled_to_absolute_2d(xc,yc,s)
+    %Rows: coefficients of 1, x, y, xy, x^2, y^2. Columns: coefficients of
+    %1, z, w, zw, z^2, w^2 with z = (x-xc)/s and w = (y-yc)/s.
+    T = [1, -xc/s, -yc/s, xc*yc/s^2,  xc^2/s^2,  yc^2/s^2;
+         0,  1/s,   0,    -yc/s^2,   -2*xc/s^2,  0;
+         0,  0,     1/s,  -xc/s^2,    0,        -2*yc/s^2;
+         0,  0,     0,     1/s^2,     0,         0;
+         0,  0,     0,     0,         1/s^2,     0;
+         0,  0,     0,     0,         0,         1/s^2];
+end

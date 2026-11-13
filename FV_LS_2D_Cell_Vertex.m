@@ -1,7 +1,16 @@
-%Convergence test for FV LS 3rd order polynomials with uniform cell-vertex mesh (constrained) 
-    %%% Run pde = linear for order or pde = burgers for behavior around shock
+%FV_LS_2D_Cell_Vertex.m
+%   Finite volume scheme on median-dual control volumes with the constrained
+%   quadratic least squares reconstruction only (no WENO weights), for the
+%   2D Burgers' equation with u0 = 1/3 + 2/3 sin(x + y) on [0,2*pi]^2.
+%   Before the shock (t_final = 0.15) the scheme is third order; after the
+%   shock (t_final = 1) the reconstruction oscillates near the shock.
+%   Prints L1, L2 and Linf errors of the cell averages (area-weighted and
+%   normalized) and saves a profile of all cell averages against x + y
+%   for N = 80 to Results/2D. Run pde = linear for an advection test.
 
-clear all; close all;
+clear; close all;
+pth = fullfile(pwd, 'Results');  % figures are saved to ./Results/2D
+if ~exist(fullfile(pth, '2D'), 'dir'), mkdir(fullfile(pth, '2D')); end
 
 
     %Stored Info Guide: 
@@ -172,59 +181,27 @@ yL = 0; yR = 2*pi;
 
         end
 
-        x_dense = (xL:h/10:xR)';
-        y_dense = (yL:h/10:yR);
-        u_ref_x = u_ref(x_dense, 0.001);
-        u_ref_y = u_ref(0.001, y_dense);
-        fig_num = kk;
-        fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-        Method = "Least Squares Poly Approx"; 
-       
-        %Visualization: Need NxN with NaNs for visualization, cut off for
-        %error
-
-        if n == n_set_array(end)
-             %Plot exact cell averages
-             exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-             fig_num = 3;
-             exact_avg_array = reshape(exact_avg_vec,N,N);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, exact_avg_array)
-             title("Plot of Exact Cell Avg at t=" + t_final + " with nX = " + N)
-             %saveas(fig_num, sprintf('%s/FV_Least_Square_Hexagon/least_square_plot_exact_%d_%d.jpg',pth,N,t_final),'jpeg')
-
-
-
-             %Plot approx cell averages
-             fig_num = 4;
-             approx_avg_array = reshape(u,N,N);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, approx_avg_array)
-             title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + N)
-             %saveas(fig_num, sprintf('%s/FV_Least_Square_Hexagon/least_square_plot_exact_%d_%d.jpg',pth,N,t_final),'jpeg')
-
-             fig_num = fig_num + 3;
-        end
-    
+        %Errors in the cell averages of the (n+1)^2 vertices of [0,2*pi]^2,
+        %area-weighted and normalized
         exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-        
-        exact_avg_array = reshape(exact_avg_vec,N,N);
-        approx_avg_array = reshape(u,N,N);
+        e = u(ind_vec) - exact_avg_vec(ind_vec);
+        w = area(ind_vec)/sum(area(ind_vec));
+        L1Error(kk) = sum(w.*abs(e));
+        L2_Error_quadratic(kk) = sqrt(sum(w.*e.^2));
+        LinfError(kk) = max(abs(e));
 
-       
-        %Compute Error
-        uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
-
-        L2_Error_quadratic(kk) = ((1/(n_steps))*sum(sum(abs(uDif).^2)))^(1/2);
+        %Profile of all cell averages against x + y (N = 80)
+        if n == 80 && pde == "burgers"
+            plot_diagonal_profile_cv(xcoord(ind_vec), ycoord(ind_vec), u(ind_vec), ...
+                @(s) solveBurgers2(alpha, beta, 2*t_final, s), ...
+                fullfile(pth, '2D', sprintf('cv_ls_burgers_t%s_N%d.pdf', strrep(num2str(t_final), '.', 'p'), n)));
+        end
    
    end
    
-    format shorte
-    p = 3;
-    err_name = "L2 Error";
-    T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
-    order_plot(L2_Error_quadratic, Method,p,DX,err_name, k);
-    %saveas(6, sprintf('%s/FV_Least_Square_Hexagon/ls_convergence_plot_%d.jpg',pth, t_final),'jpeg')
+    T1 = order_table(DX,n_array, L1Error, "L1 Error");
+    T2 = order_table(DX,n_array, L2_Error_quadratic, "L2 Error");
+    T3 = order_table(DX,n_array, LinfError, "Linf Error");
 
     % 
     % %Test periodic boundary on exact solution
@@ -528,8 +505,11 @@ end
 function W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area)
 
     
-        f1 = @(x,y) 1;    f2 = @(x,y) x;       f3 = @(x,y) y; 
-        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2; f6 = @(x,y) y.^2;
+        %Center the least squares on vertex i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = xcoord(i); yc = ycoord(i); s = sqrt(area(i));
+        f1 = @(x,y) 1;    f2 = @(x,y) (x-xc)/s;       f3 = @(x,y) (y-yc)/s; 
+        f4 = @(x,y) ((x-xc)/s).*((y-yc)/s); f5 = @(x,y) ((x-xc)/s).^2; f6 = @(x,y) ((y-yc)/s).^2;
          %Build matrix for least squares
         A = zeros(m,k);
         for jj = 1:m %j is cell, jj is index
@@ -565,6 +545,12 @@ function W = hexagon_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in
         F = P/mu;
 
         W = [E, F];
+
+        %Map coefficients of 1, z, w, zw, z^2, w^2 (z = (x-xc)/s, w = (y-yc)/s)
+        %back to coefficients of 1, x, y, xy, x^2, y^2, so the rest of the
+        %code is unchanged.
+        W = scaled_to_absolute_2d(xc,yc,s)*W;
+
 
 
 end
@@ -741,17 +727,6 @@ end
 
 
 
-function order_plot(L2Error,Method,p,dx,err_name, k)
-    figure(6)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with K = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
-end
-
 function T = order_table(dx,n_array, L2Error, err_name)
     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
     %Format table
@@ -759,4 +734,34 @@ function T = order_table(dx,n_array, L2Error, err_name)
     T = table(fractions', L2Error(:),[0;L2Order(:)], ...
         'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
     disp(T)
+end
+
+function T = scaled_to_absolute_2d(xc,yc,s)
+    %Rows: coefficients of 1, x, y, xy, x^2, y^2. Columns: coefficients of
+    %1, z, w, zw, z^2, w^2 with z = (x-xc)/s and w = (y-yc)/s.
+    T = [1, -xc/s, -yc/s, xc*yc/s^2,  xc^2/s^2,  yc^2/s^2;
+         0,  1/s,   0,    -yc/s^2,   -2*xc/s^2,  0;
+         0,  0,     1/s,  -xc/s^2,    0,        -2*yc/s^2;
+         0,  0,     0,     1/s^2,     0,         0;
+         0,  0,     0,     0,         1/s^2,     0;
+         0,  0,     0,     0,         0,         1/s^2];
+end
+
+
+function plot_diagonal_profile_cv(xc, yc, uc, w_exact, fname)
+    %Cell averages against s = x + y (mod 2*pi). For data that depend only on
+    %x + y, all cells collapse onto one curve, and any spread shows
+    %oscillations. Exact solution as a red line, cell averages as green
+    %symbols, no title (details go in the LaTeX caption).
+    s = mod(xc(:) + yc(:), 2*pi);
+    sf = linspace(0, 2*pi, 2000);
+    fig = figure('Units','inches','Position',[1 1 5.5 4.0],'Color','w');
+    plot(sf, arrayfun(w_exact, sf), 'r-', 'LineWidth', 1.5); hold on
+    plot(s, uc(:), 'o', 'Color', [0 0.5 0], 'MarkerSize', 3, 'LineWidth', 0.75);
+    xlim([0 2*pi]); ylim([-0.6 1.3]);
+    xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
+    xlabel('x + y'); ylabel('u');
+    legend({'Exact','Least squares'}, 'Location', 'southwest', 'Box', 'off');
+    set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
+    exportgraphics(fig, fname, 'ContentType', 'vector');
 end
