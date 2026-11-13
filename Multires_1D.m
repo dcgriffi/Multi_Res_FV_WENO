@@ -35,7 +35,7 @@ xL = 0; xR = 2*pi;
 x0 = linspace(pi/400,pi-pi/400,3657); 
 
 %Range of points on x for convergence study
-n_array=[20,40,80,160]; 
+n_array=[20,40,80,160,320]; 
 % n_array=[600,700,800]; 
 %n_array=[50]; 
 
@@ -123,7 +123,7 @@ for kk=1:length(n_array)
     
         uDif = u_ref(idx) - u_avg(idx);
         L1Error(kk)= (1/numel(idx))*sum(abs(uDif));
-        L2Error(kk)= (1/numel(idx))*sum(abs(uDif).^2)^(1/2);
+        L2Error(kk)= ((1/numel(idx))*sum(abs(uDif).^2))^(1/2);
         LinfError(kk) = max(abs(uDif));
     end
 
