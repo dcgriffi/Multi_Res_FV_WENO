@@ -1,31 +1,68 @@
-%Convergence test for LS linear polynomials with uniform rectangular mesh (constrained) 
+%LS_Lin_2D_Rectangle.m
+%   Constrained least squares reconstruction of a linear polynomial
+%   (k = 3 coefficients: 1, x, y) from cell averages on a rectangular grid.
+%   Proof of concept for one one-sided direction of a linear stage: the
+%   stencil is the target cell and its east and north neighbors (m = 3), so
+%   the polynomial interpolates the three cell averages. A full linear stage
+%   would repeat this for each one-sided direction.
+%
+%   test = "example"     : non-uniform grid on [0,1]^2. For one target cell,
+%                          prints the difference of the cell averages of p
+%                          and f over the whole grid and saves a figure of it
+%                          to Results/LS_2D/ls_rect_lin_example.pdf.
+%   test = "convergence" : L2 error of the reconstruction of sin(2*pi*(x+y))
+%                          on uniform periodic grids of [0,1]^2. Expected
+%                          order: 2.
+%
+%   The least squares system is built in local coordinates centered at the
+%   target cell and scaled by sqrt(area), then mapped back to 1, x, y.
+%   Requires lgwt.m.
 
+clear; close all;
 
-clear all; close all;
+test = "convergence";   % "example" or "convergence"
 
-pth = '';
+k = 3; m = 3;            % linear polynomial; target, east and north cells
+u_initial = @(x,y) sin(2*pi*(x+y));     % convergence test
+f_example = @(x,y) sin(2*pi*(x+y));     % worked example
 
+if test == "example"
+    %Non-uniform grid on [0,1]^2
+    x = [0; 0.5; 0.9; 1.4; 2.3; 3.2; 4]/4;
+    y = [0, 0.6, 0.7, 1.2, 2.7, 3.5, 4.1, 5.2]/5.2;
+    dx = x(2:end) - x(1:end-1); dy = y(2:end) - y(1:end-1);
+    nX = length(x)-1; nY = length(y)-1; N = nX*nY;
+    [ind_array,sten_array, coord_array, sten_coord_array] = get_rectangle_mesh_info(nX,nY,x,y,dx,dy,N);
+    v_vec = build_cell_avg_vec(coord_array,f_example,N);
+    i = ind_array(3,4);                          % interior target cell
+    linear_stencil = [1,2,4];                    % target, east, north
+    stencil = sten_array(i,:);
+    W = rectangle_linear_condensed_constrained_weight_matrix(k,m,i,sten_coord_array,coord_array);
+    C = W*[v_vec(stencil(linear_stencil)); -v_vec(i)];
+    p = @(xx,yy) C(1) + C(2)*xx + C(3)*yy;
+    used_cells = stencil(linear_stencil);
+    pbar = zeros(N,1);
+    for j = 1:N
+        c = coord_array(j,:);
+        pbar(j) = Gauss_quad_2D(c(1),c(2),c(3),c(4),p)/((c(2)-c(1))*(c(4)-c(3)));
+    end
+    diff_array = reshape(pbar - v_vec, [nX,nY]);    % (x index, y index)
+    disp('Difference of cell averages (p - f), rows = x index, columns = y index:')
+    disp(diff_array)
+    in_stencil = false(nX,nY);
+    for j = used_cells, in_stencil(ind_array == j) = true; end
+    pth = fullfile(pwd, 'Results', 'LS_2D');
+    if ~exist(pth, 'dir'), mkdir(pth); end
+    plot_stencil_grid(diff_array, ind_array, i, in_stencil, fullfile(pth, 'ls_rect_lin_example.pdf'));
+    return
+end
 
-%Test for second order approximation
-
-n_array=[5,10,20,40,80,160]; 
-
-%Preallocate arrays for memory
-DX = zeros(length(n_array),1); dt = zeros(length(n_array),1); 
-L2_Error_quadratic = zeros(length(n_array),1); L1Error = zeros(length(n_array),1); 
-L2_Error_linear = zeros(length(n_array),1);
-LinfError= zeros(length(n_array),1); err = zeros(length(n_array),1); 
-
-%In each cell, obtain polynomial approximation and store coefficients
-%as we did for DG
-
+n_array = [5,10,20,40,80,160];
+DX = zeros(length(n_array),1); L2_Error_linear = zeros(length(n_array),1);
 xL = 0; xR = 1;
 yL = xL; yR = xR;
 
 %Cycle through all ranges of dx
-   p = 3;
-   u_initial= @(x,y) sin(2*pi*(x+y));
-   %u_initial= @(x,y) 3 + 4*x + 3*y -4*x.*y + 7*x.^2 + 10*y.^2;
     for kk=1:length(n_array)
 
         %Build spatial array
@@ -46,8 +83,6 @@ yL = xL; yR = xR;
         v_array = reshape(v_vec, [nX,nY]);
 
        
-        %Second order approximation
-        k = 3; m = 3; 
 
         %Obtain weight matrix for coefficents
         W = zeros(k, m+1, N);
@@ -70,63 +105,18 @@ yL = xL; yR = xR;
         end
 
 
-        %Prep for visualization
-        x_dense = (xL:h/10:xR)';
-        y_dense = (yL:h/10:yR);
-        u_ref_x = u_initial(x_dense, 0.001);
-        u_ref_y = u_initial(0.001, y_dense);
-        fig_num = kk;
-        fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-        Method = "Least Squares Poly Approx"; 
-        
-        if nX == 10 || nX == 160
-             plot_solution(variable_name,C,u_ref_x, u_ref_y, fig_num,Method,N,nX,nY,x,y,x_dense,y_dense,h,k)
-            % saveas(fig_num, sprintf('%s/Least_Square_Rectangle/least_square_plot_x_linear_%d.jpg',pth,nX),'jpeg')
-            % saveas(fig_num+1, sprintf('%s/Least_Square_Rectangle/least_square_plot_y_linear_%d.jpg',pth,nX),'jpeg')
-        end
-         
         global_L2_linear = global_L2_error(C,u_initial,N,coord_array,k);
         L2_Error_linear(kk)= (global_L2_linear)^(1/2);
 
-        %Plot 2D solution for nX = 10 (quadratic, three points)\
-        fig_num = fig_num + 1;
-        x_dense = NaN(30,1);
-        y_dense = NaN(1,30);
-        u_approx_array = NaN(30,30);
-        u_exact_array = NaN(30,30);
-
-        if nX == 10
-           plot_2D_rectangle_exact_approx(x,y,nX,nY,C,ind_array,u_initial,fig_num,h,pth)
-        end
-
-
-        fig_num = fig_num + 1;     
-                 
     end
 
-    p = 2;
-    fig_num = kk + 20; err_name = "L2 Error";
-    T2 = order_table(DX,n_array, L2_Error_linear, err_name);
-    order_plot(L2_Error_linear,fig_num,Method,p,DX,err_name, k);
-
-   % saveas(fig_num, sprintf('%s/Least_Square_Rectangle/constrained_least_square_lin_convergence_plot.jpg',pth),'jpeg')
+    T2 = order_table(DX,n_array, L2_Error_linear, "L2 Error");
 
 
 
 
 
 
-
-function order_plot(L2Error,fig_num,Method,p,dx,err_name, k)
-    figure(fig_num)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with k = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
-end
 
 function T = order_table(dx,n_array, L2Error, err_name)
     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
@@ -157,49 +147,6 @@ function global_L2_Error = global_L2_error(C,exact_sol,N,coord_array,k)
     end
 end
 
-function plot_solution(variable_name,C,u_ref_x, u_ref_y, fig_num,Method,N,nX,nY,x,y,x_dense,y_dense,h,k)
-
-%Update to do one plot in x, fixing y and one plot in y, fixing x = 0
-    %Plot Solution (fix y = 0)
-    figure(fig_num)
-    plot(x_dense,u_ref_x) %Plot exact (need u_ref inside)
-    hold on
-
-    for i = 1:nX
-        cell = i;
-        if k == 6
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-        elseif k == 3
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y;
-        end
-        %Plot 5 points in the interval  + 
-        int_points = (x(i):h/5:x(i+1));%This enumerates cells in x direction, midslice tells which cells in y. 
-        plot(int_points,u_cell(int_points, 0.001))
-    end
-    title(sprintf("Slice of %s at y = 0 from %s with nX = ", [variable_name Method]) + nX)
-    legend('Exact','Approximate')
-
-    %Plot Solution (fix x = 0)
-    figure(fig_num+1)
-    plot(y_dense,u_ref_y) %Plot exact (need u_ref inside)
-    hold on
-    for i = 1:nY
-        cell = 1 + (i - 1)*nX;
-        
-        if k == 6
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-        elseif k == 3
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y;
-        end
-
-        %Plot 5 points in the interval  + 
-        int_points = (y(i):h/5:y(i+1)); %This enumerates cells in x direction, midslice tells which cells in y. 
-        plot(int_points,u_cell(0.001, int_points))
-    end
-    title(sprintf("Slice of %s at x = 0 from %s with nX = ", [variable_name Method]) + nY)
-    legend('Exact','Approximate')
-end
-
 function result = Gauss_quad_2D(xlow,xhigh,ylow,yhigh,interior)
         [x_vals,x_weights] = lgwt(5,xlow, xhigh);
         [y_vals, y_weights] = lgwt(5,ylow, yhigh);
@@ -210,13 +157,18 @@ end
 
 
  function W = rectangle_linear_condensed_constrained_weight_matrix(k,m,i,sten_coord_array,coord_array)
+        %Center the least squares on cell i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = (coord_array(i,1) + coord_array(i,2))/2; yc = (coord_array(i,3) + coord_array(i,4))/2;
+        s = sqrt((coord_array(i,2) - coord_array(i,1))*(coord_array(i,4) - coord_array(i,3)));
+
 
         %Build matrix for least squares
         A = zeros(m,k);
         linear_stencil = [1,2,4,6,8];
         for j = 1:m
             cell = linear_stencil(j);
-            x_m = sten_coord_array(i,cell,1); x_p = sten_coord_array(i,cell,2); y_m = sten_coord_array(i,cell,3); y_p = sten_coord_array(i,cell,4);
+            x_m = (sten_coord_array(i,cell,1)-xc)/s; x_p = (sten_coord_array(i,cell,2)-xc)/s; y_m = (sten_coord_array(i,cell,3)-yc)/s; y_p = (sten_coord_array(i,cell,4)-yc)/s;
             area = (x_p - x_m)*(y_p - y_m);
             A(j,1) = 1/area*(x_p - x_m)*(y_p - y_m);
             A(j,2) = 1/area*(x_p^2 - x_m^2)*(y_p-y_m)/2;
@@ -226,7 +178,7 @@ end
         %Build L matrix
         L = zeros(1,k);
         cell = i;
-        x_m = coord_array(cell,1); x_p = coord_array(cell,2); y_m = coord_array(cell,3); y_p = coord_array(cell,4);
+        x_m = (coord_array(cell,1)-xc)/s; x_p = (coord_array(cell,2)-xc)/s; y_m = (coord_array(cell,3)-yc)/s; y_p = (coord_array(cell,4)-yc)/s;
         area = (x_p - x_m)*(y_p - y_m);
         L(1) = 1/area*(x_p - x_m)*(y_p - y_m);
         L(2) = 1/area*(x_p^2 - x_m^2)*(y_p-y_m)/2;
@@ -245,6 +197,11 @@ end
         F = P/mu;
 
         W = [E, F];
+
+        %Map coefficients of 1, z, w (z = (x-xc)/s, w = (y-yc)/s) back to
+        %coefficients of 1, x, y, so the rest of the code is unchanged.
+        W = [1, -xc/s, -yc/s; 0, 1/s, 0; 0, 0, 1/s]*W;
+
 
  end
 
@@ -330,64 +287,43 @@ end
     end 
  end
 
- function plot_2D_rectangle_exact_approx(x,y,nX,nY,C,ind_array,u_initial,fig_num,h,pth)
-    fig_num = fig_num + 1;
-    figure(fig_num)
-    x_dense = NaN(30,1);
-    y_dense = NaN(1,30);
-    u_approx_array = NaN(30,30);
-    u_exact_array = NaN(30,30);
-    int = 1;
-    for i = 1:nY
-        int_points_y = (y(i):h/2:y(i+1));
-         for m = 1:3
-             y_point = int_points_y(m);
-             for j = 1:nX           
-                 cell = ind_array(j,i);
-                 u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y;
-                 int_points_x = (x(j):h/2:x(j+1)); 
-                 x_dense((1+3*(j-1)):(3+3*(j-1))) = int_points_x;
-                 y_dense(m+3*(i - 1)) = y_point;
-                 u_approx_array((1+3*(j-1)):(3+3*(j-1)),(m+3*(i - 1))) = u_cell(int_points_x,y_point);
-                 u_exact_array((1+3*(j-1)):(3+3*(j-1)),(m+3*(i - 1))) = u_initial(int_points_x,y_point);
-                 
-             end
-         end
-    end
-    [X,Y] = meshgrid(x_dense,y_dense);
-    surf(X,Y,u_approx_array);
-    title(sprintf("2D Plot of constrained least square for sin(x + y)"))
-    %saveas(fig_num, sprintf('%s/Least_Square_Rectangle/least_square_plot_2D_linear_%d.jpg',pth,nX),'jpeg')
-    
-    fig_num = fig_num + 1;
-    figure(fig_num)
-    surf(X,Y,u_exact_array);
-    title(sprintf("2D Plot of exact solution for sin(x + y)"))
-    %saveas(fig_num, sprintf('%s/Least_Square_Rectangle/exact_plot_2D_linear_%d.jpg',pth,nX),'jpeg')
- end
-
-
- function difference = test_cell_avg_difference_rectangle(coord_array,nX,nY,N,C,v_array);
- %Check the difference between the function and cell averages for
-        %each cell (it works)
-        
-        cell_avg = zeros(N,1);
-        for i = 1:N
-            cell = i;
-            %Compute cell average using polynomial c
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y;
-            x_m = coord_array(i,1); x_p = coord_array(i,2); y_m = coord_array(i,3); y_p = coord_array(i,4);
-            area = (x_p - x_m)*(y_p- y_m);
-            %Obtain local error estimate with quadrature
-            interior= @(x,y) u_cell(x,y);
-            cell_avg(i) = Gauss_quad_2D(x_m,x_p,y_m,y_p,interior)/area;
-
+function plot_stencil_grid(diff_array, ind_array, i, in_stencil, fname)
+    %Grid of cells in index layout (x to the right, y up) with the value of
+    %diff_array in each cell. Stencil cells are shaded light gray and
+    %outlined in red, and the target cell i is shaded darker. No title;
+    %details go in the LaTeX caption.
+    [nX, nY] = size(diff_array);
+    [ti, tj] = find(ind_array == i);
+    fig = figure('Units','inches','Position',[1 1 8.0 5.6],'Color','w'); hold on
+    for ix = 1:nX
+        for jy = 1:nY
+            if ix == ti && jy == tj
+                col = [0.75 0.75 0.75];
+            elseif in_stencil(ix,jy)
+                col = [0.92 0.92 0.92];
+            else
+                col = [1 1 1];
+            end
+            rectangle('Position',[ix-1, jy-1, 1, 1], 'FaceColor', col, 'EdgeColor', [0.5 0.5 0.5]);
+            text(ix-0.5, jy-0.5, sprintf('%.1e', diff_array(ix,jy)), ...
+                'HorizontalAlignment','center', 'FontSize', 8);
         end
-        
-
-        cell_avg_array = reshape(cell_avg, [nX,nY]);
-
-        difference = abs(v_array - cell_avg_array);
- end
-
-            
+    end
+    for ix = 1:nX
+        for jy = 1:nY
+            if in_stencil(ix,jy)
+                %Outline the outer edges of the stencil in red
+                if ix == 1  || ~in_stencil(ix-1,jy), plot([ix-1 ix-1],[jy-1 jy],'r-','LineWidth',2); end
+                if ix == nX || ~in_stencil(ix+1,jy), plot([ix ix],[jy-1 jy],'r-','LineWidth',2); end
+                if jy == 1  || ~in_stencil(ix,jy-1), plot([ix-1 ix],[jy-1 jy-1],'r-','LineWidth',2); end
+                if jy == nY || ~in_stencil(ix,jy+1), plot([ix-1 ix],[jy jy],'r-','LineWidth',2); end
+            end
+        end
+    end
+    axis equal; xlim([0 nX]); ylim([0 nY]);
+    xticks(0.5:1:nX-0.5); xticklabels(arrayfun(@(q) sprintf('%d', q), 1:nX, 'UniformOutput', false));
+    yticks(0.5:1:nY-0.5); yticklabels(arrayfun(@(q) sprintf('%d', q), 1:nY, 'UniformOutput', false));
+    xlabel('Cell index in x'); ylabel('Cell index in y');
+    set(gca, 'FontSize', 10, 'TickLength', [0 0], 'Box', 'on');
+    exportgraphics(fig, fname, 'ContentType', 'vector');
+end
