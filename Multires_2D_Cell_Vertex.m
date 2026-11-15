@@ -35,14 +35,15 @@ if ~exist(fullfile(pth, '2D'), 'dir'), mkdir(fullfile(pth, '2D')); end
 
 tic
 
-%Uncomment the desired time
-t_final = 2/2; %After shock
-%t_final = 0.3/2; 
+%Final time: the 2D Burgers' solution is w(x + y, 2t), so t = 0.15 and
+%t = 1 correspond to t = 0.3 and t = 2 in 1D. The shock forms at t = 0.75.
+t_final = 0.3/2;          % 1 (after the shock) or 0.3/2 (before the shock)
 
-%Choose eps to test
+%Epsilon in the nonlinear weights
 eps = 1e-5;
-%t_final = 1e-2;
-avoid_shock = true;
+
+%After the shock forms, measure the error away from the shock
+avoid_shock = (t_final > 0.75);
 
 p = 3;
 
@@ -68,7 +69,7 @@ f = @(u) c*u;
 g = @(u) c*u; 
 end
 
-  n_array = [20,40,80];
+  n_array = [20,40,80,160,320];
 
    Method = "Multiresolution WENO"; p = 3;
         
@@ -208,100 +209,41 @@ end
             u_ref = @(x,y) u_initial(x - c*t_final, y - c*t_final);
         end
 
-        x_dense = (xL:h/10:xR)';
-        y_dense = (yL:h/10:yR);
-        u_ref_x = u_ref(x_dense, 0.001);
-        u_ref_y = u_ref(0.001, y_dense);
-        fig_num = kk;
-        fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-        Method = "Least Squares Poly Approx"; 
-
-        if n_x == n_set_array(end)
-             %Plot exact cell averages
-             exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-             fig_num = 3;
-             exact_avg_array = reshape(exact_avg_vec,N_y,N_x);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, exact_avg_array)
-             title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact.jpg',pth,t_final*2,eps,approach),'jpeg')
-
-             view([-1, 1, 0]);
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
-
-             %Plot approx cell averages
-             fig_num = 5;
-             approx_avg_array = reshape(u,N_y,N_x);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, approx_avg_array)
-             title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + n_x + " and eps = " + eps)
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx.jpg',pth,t_final*2,eps),'jpeg')
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
-
-             view([-1, 1, 0]);
-             saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side.jpg',pth,t_final*2,eps,approach),'jpeg')
-
-             fig_num = fig_num + 3;
-        end
-    
+        %Errors in the cell averages of the (n+1)^2 vertices of [0,2*pi]^2
+        %(the interior vertices 4:end-3), area-weighted and normalized:
+        %  L1 = sum |V_j||e_j| / sum |V_j|,  L2 = (sum |V_j| e_j^2 / sum |V_j|)^(1/2),
+        %  Linf = max |e_j|,
+        %over all of these cells, or over the cells away from the shock.
         exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-       
-        exact_avg_array = reshape(exact_avg_vec,N_y,N_x);
-        approx_avg_array = reshape(u,N_y,N_x);
-
-        if avoid_shock == false
-        uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
-
-        %L2_Error_quadratic(kk) = ((1/(n_steps))*sum(sum(abs(uDif).^2)))^(1/2);
-        
-        elem_area = reshape(area,N_y,N_x);
-        elem_area = elem_area(4:end-3,4:end-3);
-        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2)))^(1/2);
-
+        all_v = reshape(1:N_x*N_y, N_y, N_x);
+        cells = reshape(all_v(4:end-3, 4:end-3), 1, []);
+        if avoid_shock
+            %The shock is at x + y = pi + 2*alpha*t (and its periodic copy at
+            %x + y = 3*pi + 2*alpha*t); keep cells at distance more than 1.
+            s_shock = pi + 2*alpha*t_final;
+            s = xcoord(cells) + ycoord(cells);
+            cells = cells(abs(s - s_shock) > 1 & abs(s - (s_shock + 2*pi)) > 1);
         end
+        e = u(cells) - exact_avg_vec(cells);
+        w = area(cells)/sum(area(cells));
+        L1Error(kk) = sum(w.*abs(e));
+        L2_Error_quadratic(kk) = sqrt(sum(w.*e.^2));
+        LinfError(kk) = max(abs(e));
 
-        if avoid_shock == true
-
-        %Find shock idx (which cells are outside of shock)
-
-            global_L2_Error = 0;
-  
-            xShock = 2*pi + alpha * t_final;
-            diag_shock1 = xShock - pi;
-            diag_shock2 = xShock + pi;    
-            
-            dist_shock1 = abs(xcoord + ycoord - diag_shock1);
-            dist_shock2 = abs(xcoord + ycoord - diag_shock2);
-
-            padding = 1;
-
-            in_shock1 = dist_shock1 <= padding;
-            in_shock2 = dist_shock2 <= padding;
-
-            away_from_shock = ~(in_shock1 |  in_shock2);
-            cell_count = sum(away_from_shock);
-           
-            away_from_shock = reshape(away_from_shock, N_y,N_x);
-
-            exact_avg_array = exact_avg_array(4:end-3, 4:end-3);
-            approx_avg_array = approx_avg_array(4:end-3, 4:end-3);
-            away_from_shock = away_from_shock(4:end-3, 4:end-3);
-
-            uDif = approx_avg_array(away_from_shock) - exact_avg_array(away_from_shock);
-
-            L2_Error_quadratic(kk) = ((1/(cell_count))*sum(sum(abs(uDif).^2)))^(1/2);
-
+        %Profile of all cell averages against x + y (N = 80)
+        if n_x == 80 && pde == "burgers"
+            interior = reshape(all_v(4:end-3, 4:end-3), 1, []);
+            plot_diagonal_profile_cv(xcoord(interior), ycoord(interior), u(interior), ...
+                @(s) solveBurgers2(alpha, beta, 2*t_final, s), ...
+                fullfile(pth, '2D', sprintf('cv_mr_burgers_t%s_N%d.pdf', strrep(num2str(t_final), '.', 'p'), n_x)));
         end
 
    
    end
    
-    format shorte
-    p = 3;
-    err_name = "L2 Error";
-    T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
-    order_plot(L2_Error_quadratic, Method,p,DX,err_name, k);
-    saveas(10, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s.jpg',pth,t_final*2,eps,approach),'jpeg')
+    T1 = order_table(DX,n_array, L1Error, "L1 Error");
+    T2 = order_table(DX,n_array, L2_Error_quadratic, "L2 Error");
+    T3 = order_table(DX,n_array, LinfError, "Linf Error");
 
 
 %%%%%%%%%%%Start of new functions%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -843,8 +785,11 @@ end
 function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area)
 
     
-        f1 = @(x,y) 1;    f2 = @(x,y) x;       f3 = @(x,y) y; 
-        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2; f6 = @(x,y) y.^2;
+        %Center the least squares on vertex i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = xcoord(i); yc = ycoord(i); s = sqrt(area(i));
+        f1 = @(x,y) 1;    f2 = @(x,y) (x-xc)/s;       f3 = @(x,y) (y-yc)/s; 
+        f4 = @(x,y) ((x-xc)/s).*((y-yc)/s); f5 = @(x,y) ((x-xc)/s).^2; f6 = @(x,y) ((y-yc)/s).^2;
         
         %Build matrix for least squares
         A = zeros(m,k);
@@ -882,6 +827,12 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         F = P/mu;
 
         W = [E, F];
+
+        %Map coefficients of 1, z, w, zw, z^2, w^2 (z = (x-xc)/s, w = (y-yc)/s)
+        %back to coefficients of 1, x, y, xy, x^2, y^2, so the rest of the
+        %code is unchanged.
+        W = scaled_to_absolute_2d(xc,yc,s)*W;
+
 
 
 
@@ -1062,17 +1013,6 @@ end
 
 
 
-function order_plot(L2Error,Method,p,dx,err_name, k)
-    figure(10)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with K = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
-end
-
 function T = order_table(dx,n_array, L2Error, err_name)
     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
     %Format table
@@ -1080,4 +1020,34 @@ function T = order_table(dx,n_array, L2Error, err_name)
     T = table(fractions', L2Error(:),[0;L2Order(:)], ...
         'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
     disp(T)
+end
+
+function T = scaled_to_absolute_2d(xc,yc,s)
+    %Rows: coefficients of 1, x, y, xy, x^2, y^2. Columns: coefficients of
+    %1, z, w, zw, z^2, w^2 with z = (x-xc)/s and w = (y-yc)/s.
+    T = [1, -xc/s, -yc/s, xc*yc/s^2,  xc^2/s^2,  yc^2/s^2;
+         0,  1/s,   0,    -yc/s^2,   -2*xc/s^2,  0;
+         0,  0,     1/s,  -xc/s^2,    0,        -2*yc/s^2;
+         0,  0,     0,     1/s^2,     0,         0;
+         0,  0,     0,     0,         1/s^2,     0;
+         0,  0,     0,     0,         0,         1/s^2];
+end
+
+
+function plot_diagonal_profile_cv(xc, yc, uc, w_exact, fname)
+    %Cell averages against s = x + y (mod 2*pi). For data that depend only on
+    %x + y, all cells collapse onto one curve, and any spread shows
+    %oscillations. Exact solution as a red line, cell averages as green
+    %symbols, no title (details go in the LaTeX caption).
+    s = mod(xc(:) + yc(:), 2*pi);
+    sf = linspace(0, 2*pi, 2000);
+    fig = figure('Units','inches','Position',[1 1 5.5 4.0],'Color','w');
+    plot(sf, arrayfun(w_exact, sf), 'r-', 'LineWidth', 1.5); hold on
+    plot(s, uc(:), 'o', 'Color', [0 0.5 0], 'MarkerSize', 3, 'LineWidth', 0.75);
+    xlim([0 2*pi]); ylim([-0.6 1.3]);
+    xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
+    xlabel('x + y'); ylabel('u');
+    legend({'Exact','Multi-resolution WENO'}, 'Location', 'southwest', 'Box', 'off');
+    set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
+    exportgraphics(fig, fname, 'ContentType', 'vector');
 end
