@@ -756,7 +756,7 @@ function plot_diagonal_profile(x_avg, y_avg, v_array, w_exact, fname)
     %Cell averages against s = x + y (mod 2*pi). For data that depend only on
     %x + y, all cells collapse onto one curve, and any spread shows
     %oscillations. Exact solution as a red line, cell averages as green
-    %symbols, no title (details go in the LaTeX caption).
+    %symbols, no title or legend (details go in the LaTeX caption).
     [X, Y] = ndgrid(x_avg, y_avg);
     s = mod(X(:) + Y(:), 2*pi);
     sf = linspace(0, 2*pi, 2000);
@@ -766,7 +766,6 @@ function plot_diagonal_profile(x_avg, y_avg, v_array, w_exact, fname)
     xlim([0 2*pi]); ylim([-0.45 1.1]);
     xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
     xlabel('x + y'); ylabel('u');
-    legend({'Exact','Multi-resolution WENO'}, 'Location', 'southwest', 'Box', 'off');
     set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
     exportgraphics(fig, fname, 'ContentType', 'vector');
 end

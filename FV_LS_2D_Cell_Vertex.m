@@ -752,7 +752,7 @@ function plot_diagonal_profile_cv(xc, yc, uc, w_exact, fname)
     %Cell averages against s = x + y (mod 2*pi). For data that depend only on
     %x + y, all cells collapse onto one curve, and any spread shows
     %oscillations. Exact solution as a red line, cell averages as green
-    %symbols, no title (details go in the LaTeX caption).
+    %symbols, no title or legend (details go in the LaTeX caption).
     s = mod(xc(:) + yc(:), 2*pi);
     sf = linspace(0, 2*pi, 2000);
     fig = figure('Units','inches','Position',[1 1 5.5 4.0],'Color','w');
@@ -761,7 +761,6 @@ function plot_diagonal_profile_cv(xc, yc, uc, w_exact, fname)
     xlim([0 2*pi]); ylim([-0.6 1.3]);
     xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
     xlabel('x + y'); ylabel('u');
-    legend({'Exact','Least squares'}, 'Location', 'southwest', 'Box', 'off');
     set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
     exportgraphics(fig, fname, 'ContentType', 'vector');
 end

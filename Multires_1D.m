@@ -147,7 +147,6 @@ for kk=1:length(n_array)
         xlim([xL xR]); ylim([-0.45 1.1]);
         xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
         xlabel('x'); ylabel('u');
-        legend({'Exact','Multi-resolution WENO'}, 'Location', 'southwest', 'Box', 'off');
         set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
         exportgraphics(fig, fullfile(pth, '1D', sprintf('burgers1d_t%s_N%d.pdf', ...
             strrep(num2str(t_final), '.', 'p'), N)), 'ContentType', 'vector');

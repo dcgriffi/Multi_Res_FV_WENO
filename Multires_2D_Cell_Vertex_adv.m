@@ -290,7 +290,7 @@ end
                 dx_c = xcoord(cells) - xc; dy_c = ycoord(cells) - yc;
                 on_diag = abs(dx_c - dy_c)/sqrt(2) < h/2;
                 sf = linspace(sc - 8, sc + 8, 2000);
-                if init_case == 3, loc = 'northwest'; yl = [0 0.5]; else, loc = 'south'; yl = []; end
+                loc = ''; yl = [];   % no legend in publication plots
                 plot_profile(xcoord(cells(on_diag)) + ycoord(cells(on_diag)), u(cells(on_diag)), sf, ...
                     @(s) u_ref(xc + (s - sc)/2, yc + (s - sc)/2), 'x + y', [sc - 8, sc + 8], false, loc, fname, yl);
                 if init_case == 4
@@ -1100,7 +1100,6 @@ function plot_profile(s, us, sf, w_exact, xlab, xl, pi_ticks, loc, fname, yl)
         xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
     end
     xlabel(xlab); ylabel('u');
-    legend({'Exact','Multi-resolution WENO'}, 'Location', loc, 'Box', 'off');
     set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
     exportgraphics(fig, fname, 'ContentType', 'vector');
 end
