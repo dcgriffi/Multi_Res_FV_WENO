@@ -1,19 +1,24 @@
-%Convergence test for FV LS 3rd order polynomials with uniform rectangular mesh (constrained) 
-    %%% Run pde = linear for order or pde = burgers for behavior around shock
+%FV_LS_2D_Rectangle.m
+%   Finite volume scheme on a uniform rectangular grid with the constrained
+%   quadratic least squares reconstruction only (no WENO weights), for the
+%   2D Burgers' equation with u0 = 1/3 + 2/3 sin(x + y) on [0,2*pi]^2.
+%   The 2D solution is w(x + y, 2t), so t = 0.15 and t = 1 correspond to
+%   t = 0.3 and t = 2 in 1D; the shock forms at t = 0.75. Before the shock the
+%   scheme is third order; after the shock the reconstruction oscillates.
+%   Prints L1, L2 and Linf errors of the cell averages (area-weighted and
+%   normalized; away from the shock after it forms) and saves a profile of
+%   all cell averages against x + y for N = 80 to Results/2D.
+%   Run pde = "linear" for an advection test.
 
-clear all; close all;
-
-pth = '';
-%Uncomment the desired time
-%t_final = 2/2; %After shock
-t_final = 0.3/2;
-
-avoid_shock = true;
+clear; close all;
+pth = fullfile(pwd, 'Results');  % figures are saved to ./Results/2D
+if ~exist(fullfile(pth, '2D'), 'dir'), mkdir(fullfile(pth, '2D')); end
+t_final = 0.3/2;        % 0.3/2 (before the shock) or 2/2 (after the shock)
+avoid_shock = (t_final > 0.75);   % measure the error away from the shock after it forms
 
 p = 3;
 
-%pde = "burgers";
-pde = "linear";
+pde = "burgers";        % "burgers" or "linear"
 alpha = 1/3; beta = 2/3; 
 %u_initial = @(x,y) alpha + beta*sin((x+y)/2); 
 u_initial = @(x,y) alpha + beta*sin((x+y)); 
@@ -26,7 +31,7 @@ f = @(u) u;
 g = @(u) u; 
 end
 
-n_array=[5,10,20,40,80]; 
+n_array=[20,40,80,160]; 
 
 %Preallocate arrays for memory
 DX = zeros(length(n_array),1); dt = zeros(length(n_array),1); 
@@ -105,69 +110,32 @@ yL = xL; yR = xR;
 
         end
 
-        x_dense = (xL:h/10:xR)';
-        y_dense = (yL:h/10:yR);
-        u_ref_x = u_ref(x_dense, 0.001);
-        u_ref_y = u_ref(0.001, y_dense);
-        fig_num = kk;
-        fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-        Method = "Least Squares Poly Approx"; 
-
-        %Updating this to find error using cell average (Old way)
-        C = zeros(N,k);
-        %Build coefficient matrix using weight matrix
-        for i = 1:N
-            stencil = sten_array(i,:);
-            d = zeros(m+1,1);
-            for j = 1:m
-                cell = stencil(j);
-                d(j) = v_vec(cell);
-            end
-            d(m+1) = -v_vec(i);
-        
-            C(i,:) = W(:,:,i)*d;
-        end
-        
-       
-
-        if nX == 80
-             plot_solution(variable_name,C,u_ref_x, u_ref_y, fig_num,Method,N,nX,nY,x,y,x_dense,y_dense,h,k)
-            % saveas(fig_num, sprintf('%s/FV_Least_Square_Rectangle/least_square_plot_x_quadratic_%d_%d.jpg',pth,nX,t_final),'jpeg')
-            % saveas(fig_num+1, sprintf('%s/FV_Least_Square_Rectangle/least_square_plot_y_quadratic_%d_%d.jpg',pth,nX,t_final),'jpeg')
-             fig_num = fig_num + 3;
-        end
-    
+        %Errors in the cell averages, area-weighted and normalized, over all
+        %cells or over the cells away from the shock
         u_exact_avg = build_cell_avg_vec(coord_array,u_ref,N);
-        
-        if avoid_shock == false
-        %Compute uRef
         uDif = v_vec - u_exact_avg;
-        L2_Error_quadratic(kk) = ((1/N)*sum(abs(uDif).^2))^(1/2);
+        cell_area = (coord_array(:,2) - coord_array(:,1)).*(coord_array(:,4) - coord_array(:,3));
+        if avoid_shock
+            mask = away_from_shock(N, coord_array, t_final, alpha);
+        else
+            mask = true(N,1);
         end
+        w = cell_area(mask)/sum(cell_area(mask));
+        L1Error(kk) = sum(w.*abs(uDif(mask)));
+        L2_Error_quadratic(kk) = sqrt(sum(w.*uDif(mask).^2));
+        LinfError(kk) = max(abs(uDif(mask)));
 
-        if avoid_shock == true
-        [cell_count, global_L2_quadratic] = global_L2_error(N,coord_array,t_final,alpha,u_exact_avg,v_vec);
-        L2_Error_quadratic(kk)= ((1/cell_count)*(global_L2_quadratic))^(1/2);
+        %Profile of all cell averages against x + y (N = 80)
+        if nX == 80 && pde == "burgers"
+            x_avg = (x(1:nX) + x(2:nX+1))/2;  y_avg = (y(1:nY) + y(2:nY+1))/2;
+            plot_diagonal_profile(x_avg, y_avg, reshape(v_vec, nX, nY), ...
+                @(s) solveBurgers2(alpha, beta, 2*t_final, s), ...
+                fullfile(pth, '2D', sprintf('rect_ls_burgers_t%s_N%d.pdf', strrep(num2str(t_final), '.', 'p'), nX)));
         end
-
-        %Plot 2D solution for nX = 10 (quadratic, three points)
-        x_dense = NaN(30,1);
-        y_dense = NaN(1,30);
-        u_approx_array = NaN(30,30);
-        u_exact_array = NaN(30,30);
-
-        if nX == 40
-           plot_2D_rectangle_exact_approx(x,y,nX,nY,C,ind_array,u_ref,fig_num,h,pth)
-        end
-
-        fig_num = fig_num + 1;
     end
-    format shorte
-    p = 3;
-    fig_num = fig_num+2; err_name = "L2 Error";
-    T1 = order_table(DX,n_array, L2_Error_quadratic, err_name);
-    order_plot(L2_Error_quadratic,fig_num,Method,p,DX,err_name, k);
-    %saveas(fig_num, sprintf('%s/FV_Least_Square_Rectangle/ls_convergence_plot_%d.jpg',pth, t_final),'jpeg')
+    T1 = order_table(DX,n_array, L1Error, "L1 Error");
+    T2 = order_table(DX,n_array, L2_Error_quadratic, "L2 Error");
+    T3 = order_table(DX,n_array, LinfError, "Linf Error");
 
 
     
@@ -281,17 +249,6 @@ function fhat = lf(u_m,u_p,norm,f,g,a)
 end   
     
 %%%%%%Functions from Least Square
-function order_plot(L2Error,fig_num,Method,p,dx,err_name, k)
-    figure(fig_num)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with K = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
-end
-
 function T = order_table(dx,n_array, L2Error, err_name)
     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
     %Format table
@@ -301,71 +258,6 @@ function T = order_table(dx,n_array, L2Error, err_name)
     disp(T)
 end
 
-
-% function global_L2_Error = global_L2_error(C,exact_sol,N,coord_array,avoid_shock,t_final, alpha)
-function [cell_count, global_L2_Error] = global_L2_error(N,coord_array,t_final,alpha,u_exact_avg,v_vec)
-    global_L2_Error = 0;
-  
-    xShock = 2*pi + alpha * t_final;
-    diag_shock1 = xShock - pi;
-    diag_shock2 = xShock + pi;
-
-    low_1 = diag_shock1 - 1;
-    low_2 = diag_shock2 - 1;
-
-    high_1 = diag_shock1 + 1;
-    high_2 = diag_shock2 + 1;
-     
-    cell_count = 0;
-    for j = 1:N
-        x_m = coord_array(j,1); x_p = coord_array(j,2); y_m = coord_array(j,3); y_p = coord_array(j,4);
-        
-        if ((x_p + y_p) <= low_1) || (((x_m + y_m) >= high_1) && ((x_p + y_p) <= low_2)) || ((x_m + y_m) >= high_2)
-            %Obtain local error estimate with quadrature
-            local_error = abs(v_vec(j) - u_exact_avg(j))^2; %Obtain integral via  Legendre-Gauss quadrature
-            global_L2_Error = global_L2_Error + local_error;
-
-            cell_count = cell_count + 1;
-        end
-    end
-end
-
-function plot_solution(variable_name,C,u_ref_x, u_ref_y, fig_num,Method,N,nX,nY,x,y,x_dense,y_dense,h,k)
-
-%Update to do one plot in x, fixing y and one plot in y, fixing x = 0
-    %Plot Solution (fix y = 0)
-    figure(fig_num)
-    plot(x_dense,u_ref_x) %Plot exact (need u_ref inside)
-    hold on
-
-    for i = 1:nX
-        cell = i;
-        u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-       
-        %Plot 5 points in the interval  + 
-        int_points = (x(i):h/5:x(i+1));%This enumerates cells in x direction, midslice tells which cells in y. 
-        plot(int_points,u_cell(int_points, 0.001))
-    end
-    title(sprintf("Slice of %s at y = 0 from %s with nX = ", [variable_name Method]) + nX)
-    legend('Exact','Approximate')
-
-    %Plot Solution (fix x = 0)
-    figure(fig_num+1)
-    plot(y_dense,u_ref_y) %Plot exact (need u_ref inside)
-    hold on
-    for i = 1:nY
-        cell = 1 + (i - 1)*nX;
-        
-        u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-       
-
-        %Plot 5 points in the interval  + 
-        int_points = (y(i):h/5:y(i+1)); %This enumerates cells in x direction, midslice tells which cells in y. 
-        plot(int_points,u_cell(0.001, int_points))
-    end
-    title(sprintf("Slice of %s at x = 0 from %s with nX = ", [variable_name Method]) + nY)
-    legend('Exact','Approximate')
-end
 
 function result = Gauss_quad_2D(xlow,xhigh,ylow,yhigh,interior)
         [x_vals,x_weights] = lgwt(2,xlow, xhigh);
@@ -385,11 +277,16 @@ function result = Gauss_quad_2D(xlow,xhigh,ylow,yhigh,interior)
 end
 
 function W = rectangle_condensed_constrained_weight_matrix(k,m,i,coord_array,sten_coord_array)
+        %Center the least squares on cell i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = (coord_array(i,1) + coord_array(i,2))/2; yc = (coord_array(i,3) + coord_array(i,4))/2;
+        s = sqrt((coord_array(i,2) - coord_array(i,1))*(coord_array(i,4) - coord_array(i,3)));
+
 
          %Build matrix for least squares
         A = zeros(m,k);
         for j = 1:m
-            x_m = sten_coord_array(i,j,1); x_p = sten_coord_array(i,j,2); y_m = sten_coord_array(i,j,3); y_p = sten_coord_array(i,j,4);
+            x_m = (sten_coord_array(i,j,1)-xc)/s; x_p = (sten_coord_array(i,j,2)-xc)/s; y_m = (sten_coord_array(i,j,3)-yc)/s; y_p = (sten_coord_array(i,j,4)-yc)/s;
             area = (x_p - x_m)*(y_p - y_m);
             A(j,1) = 1/area*(x_p - x_m)*(y_p - y_m);
             A(j,2) = 1/area*(x_p^2 - x_m^2)*(y_p-y_m)/2;
@@ -402,7 +299,7 @@ function W = rectangle_condensed_constrained_weight_matrix(k,m,i,coord_array,ste
         %Build L matrix
         L = zeros(1,k);
         cell = i;
-        x_m = coord_array(cell,1); x_p = coord_array(cell,2); y_m = coord_array(cell,3); y_p = coord_array(cell,4);
+        x_m = (coord_array(cell,1)-xc)/s; x_p = (coord_array(cell,2)-xc)/s; y_m = (coord_array(cell,3)-yc)/s; y_p = (coord_array(cell,4)-yc)/s;
         area = (x_p - x_m)*(y_p - y_m);
         L(1) = 1/area*(x_p - x_m)*(y_p - y_m);
         L(2) = 1/area*(x_p^2 - x_m^2)*(y_p-y_m)/2;
@@ -424,6 +321,12 @@ function W = rectangle_condensed_constrained_weight_matrix(k,m,i,coord_array,ste
         F = P/mu;
 
         W = [E, F];
+
+        %Map coefficients of 1, z, w, zw, z^2, w^2 (z = (x-xc)/s, w = (y-yc)/s)
+        %back to coefficients of 1, x, y, xy, x^2, y^2, so the rest of the
+        %code is unchanged.
+        W = scaled_to_absolute_2d(xc,yc,s)*W;
+
 
 end
 
@@ -547,68 +450,54 @@ end
  end
 
 
- function plot_2D_rectangle_exact_approx(x,y,nX,nY,C,ind_array,u_initial,fig_num,h,pth)
-    fig_num = fig_num + 1;
-    figure(fig_num)
-    x_dense = NaN(30,1);
-    y_dense = NaN(1,30);
-    u_approx_array = NaN(30,30);
-    u_exact_array = NaN(30,30);
-    int = 1;
-    for i = 1:nY
-        int_points_y = (y(i):h/2:y(i+1));
-         for m = 1:3
-             y_point = int_points_y(m);
-             for j = 1:nX           
-                 cell = ind_array(j,i);
-                 u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-                 int_points_x = (x(j):h/2:x(j+1)); 
-                 x_dense((1+3*(j-1)):(3+3*(j-1))) = int_points_x;
-                 y_dense(m+3*(i - 1)) = y_point;
-                 u_approx_array((1+3*(j-1)):(3+3*(j-1)),(m+3*(i - 1))) = u_cell(int_points_x,y_point);
-                 u_exact_array((1+3*(j-1)):(3+3*(j-1)),(m+3*(i - 1))) = u_initial(int_points_x,y_point);
-                 
-             end
-         end
-    end
-    [X,Y] = meshgrid(x_dense,y_dense);
-    surf(X,Y,u_approx_array);
-    title(sprintf("2D Plot of constrained least square for 1/3 + 2/3sin((x + y)/2"))
-   % saveas(fig_num, sprintf('%s/FV_Least_Square_Rectangle//least_square_plot_2D_quadratic_%d.jpg',pth,nX),'jpeg')
-    
-    fig_num = fig_num + 1;
-    figure(fig_num)
-    surf(X,Y,u_exact_array);
-    title(sprintf("2D Plot of exact solution for 1/3 + 2/3sin((x + y)/2)"))
-    %saveas(fig_num, sprintf('%s/FV_Least_Square_Rectangle/exact_plot_2D_quadratic_%d.jpg',pth,nX),'jpeg')
- end
-
-
- function difference = test_cell_avg_difference_rectangle(coord_array,nX,nY,N,C,v_array);
- %Check the difference between the function and cell averages for
-        %each cell (it works)
-        
-        cell_avg = zeros(N,1);
-        for i = 1:N
-            cell = i;
-            %Compute cell average using polynomial c
-            u_cell = @(x,y) C(cell ,1) + C(cell ,2)*x + C(cell ,3)*y+ C(cell ,4)*x.*y + C(cell ,5)*x.^2 + C(cell ,6)*y.^2;
-            x_m = coord_array(i,1); x_p = coord_array(i,2); y_m = coord_array(i,3); y_p = coord_array(i,4);
-            area = (x_p - x_m)*(y_p- y_m);
-            %Obtain local error estimate with quadrature
-            interior= @(x,y) u_cell(x,y);
-            cell_avg(i) = Gauss_quad_2D(x_m,x_p,y_m,y_p,interior)/area;
-
-        end
-        
-
-        cell_avg_array = reshape(cell_avg, [nX,nY]);
-        difference = abs(v_array - cell_avg_array);
- end
-
  function int_res = one_dim_gauss_quad(fun,vals,weights)
       int_vals = fun(vals); %Evaluate interior function at vals
       int_res = sum(int_vals.*weights); %Obtain integral via  Legendre-Gauss quadrature
  end
 
- 
+function T = scaled_to_absolute_2d(xc,yc,s)
+    %Rows: coefficients of 1, x, y, xy, x^2, y^2. Columns: coefficients of
+    %1, z, w, zw, z^2, w^2 with z = (x-xc)/s and w = (y-yc)/s.
+    T = [1, -xc/s, -yc/s, xc*yc/s^2,  xc^2/s^2,  yc^2/s^2;
+         0,  1/s,   0,    -yc/s^2,   -2*xc/s^2,  0;
+         0,  0,     1/s,  -xc/s^2,    0,        -2*yc/s^2;
+         0,  0,     0,     1/s^2,     0,         0;
+         0,  0,     0,     0,         1/s^2,     0;
+         0,  0,     0,     0,         0,         1/s^2];
+end
+
+
+function mask = away_from_shock(N, coord_array, t_final, alpha)
+    %Cells whose x + y range lies at distance more than 1 from the shock.
+    %The 2D solution is w(x + y, 2t), so the shock is at x + y = pi + 2*alpha*t
+    %(and its periodic copy at x + y = 3*pi + 2*alpha*t).
+    xShock = 2*pi + alpha * 2*t_final;
+    diag_shock1 = xShock - pi;
+    diag_shock2 = xShock + pi;
+    low_1 = diag_shock1 - 1;  high_1 = diag_shock1 + 1;
+    low_2 = diag_shock2 - 1;  high_2 = diag_shock2 + 1;
+    mask = false(N,1);
+    for j = 1:N
+        x_m = coord_array(j,1); x_p = coord_array(j,2); y_m = coord_array(j,3); y_p = coord_array(j,4);
+        mask(j) = ((x_p + y_p) <= low_1) || (((x_m + y_m) >= high_1) && ((x_p + y_p) <= low_2)) || ((x_m + y_m) >= high_2);
+    end
+end
+
+function plot_diagonal_profile(x_avg, y_avg, v_array, w_exact, fname)
+    %Cell averages against s = x + y (mod 2*pi). For data that depend only on
+    %x + y, all cells collapse onto one curve, and any spread shows
+    %oscillations. Exact solution as a red line, cell averages as green
+    %symbols, no title (details go in the LaTeX caption).
+    [X, Y] = ndgrid(x_avg, y_avg);
+    s = mod(X(:) + Y(:), 2*pi);
+    sf = linspace(0, 2*pi, 2000);
+    fig = figure('Units','inches','Position',[1 1 5.5 4.0],'Color','w');
+    plot(sf, arrayfun(w_exact, sf), 'r-', 'LineWidth', 1.5); hold on
+    plot(s, v_array(:), 'o', 'Color', [0 0.5 0], 'MarkerSize', 3, 'LineWidth', 0.75);
+    xlim([0 2*pi]); ylim([-0.45 1.1]);
+    xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
+    xlabel('x + y'); ylabel('u');
+    legend({'Exact','Multi-resolution WENO'}, 'Location', 'southwest', 'Box', 'off');
+    set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
+    exportgraphics(fig, fname, 'ContentType', 'vector');
+end
