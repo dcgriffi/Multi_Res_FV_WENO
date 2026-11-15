@@ -183,13 +183,6 @@ end
 
          cell_avg_array = reshape(cell_avg, N_y, N_x);
 
-         %Visualize initialitaion 
-
-         fig_num = 3*kk;
-         figure(1)
-         trimesh(tri', xcoord, ycoord, cell_avg_array)
-         title("Plot of Initial Cell Averages with nX = "+ n_x + " and eps = " + eps)
-
          %Third order approximation
          k = 6; m = 7;
         
@@ -267,73 +260,58 @@ end
             t = t + dt;
         end
         toc
-        %Prep for visualization
-
+        %Exact solution: translation of the initial condition by c*t_final
         u_ref = @(x,y) u_initial(x - c*t_final, y - c*t_final);
-       
-        fig_num = kk;
-        fig_num = fig_num+1; variable_name = "sin(x+y)"; 
-   
-     
 
-        if n_x == n_set_array(end)
-             %Plot exact cell averages
-             exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-             fig_num = 3;
-             exact_avg_array = reshape(exact_avg_vec,N_y,N_x);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, exact_avg_array)
-             title("Plot of Exact Cell Avg at t=" + t_final + " with nX = "+ n_x + " and eps = " + eps)
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_%s_exact_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-
-             view([-1, 1, 0]);
-            % saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_exact_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-
-
-
-             %Plot approx cell averages
-             fig_num = 5;
-             approx_avg_array = reshape(u,N_y,N_x);
-             figure(fig_num)
-             trimesh(tri', xcoord, ycoord, approx_avg_array)
-             title("Plot of Approx Cell Avg at t=" + t_final + " with nX = " + n_x + " and eps = " + eps)
-           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_init_%d.jpg',pth,t_final*2,eps,init_case),'jpeg')
-           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-
-             view([-1, 1, 0]);
-           %  saveas(fig_num, sprintf('%s/2D/hexagon_multres_tFinal_%d_eps_%d_plot_approx_%s_side_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-
-             fig_num = fig_num + 3;
-        end
-    
+        %Errors in the cell averages of the interior vertices (4:end-3),
+        %area-weighted and normalized:
+        %  L1 = sum |V_j||e_j| / sum |V_j|,  L2 = (sum |V_j| e_j^2 / sum |V_j|)^(1/2),
+        %  Linf = max |e_j|
         exact_avg_vec = build_cell_avg_vec(inner_v_vec, u_ref, tri, nod_in_e2d, n2d, e2d, xcoord, ycoord, area);
-       
-        exact_avg_array = reshape(exact_avg_vec,N_y,N_x);
-        approx_avg_array = reshape(u,N_y,N_x);
+        all_v = reshape(1:N_x*N_y, N_y, N_x);
+        cells = reshape(all_v(4:end-3, 4:end-3), 1, []);
+        e = u(cells) - exact_avg_vec(cells);
+        w = area(cells)/sum(area(cells));
+        L1Error(kk) = sum(w.*abs(e));
+        L2_Error_quadratic(kk) = sqrt(sum(w.*e.^2));
+        LinfError(kk) = max(abs(e));
 
-        uDif = approx_avg_array(4:end - 3, 4:end -3) - exact_avg_array(4:end - 3, 4:end - 3);
-        elem_area = reshape(area,N_y,N_x);
-        elem_area = elem_area(4:end-3,4:end-3);
-
-        %L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2))/sum(sum(elem_area)))^(1/2);
-        L2_Error_quadratic(kk) = (sum(sum(elem_area.*abs(uDif).^2)))^(1/2);
+        %Profiles at N = 80. Case 1: all cell averages against x + y.
+        %Cases 2-4 (radial): the cells along the diagonal through the advected
+        %center (distance to the line below h/2), against x + y. For the
+        %cylinder (case 4), also at N = 160 and 320 for a resolution study.
+        if n_x == 80 || (init_case == 4 && any(n_x == [160, 320]))
+            fname = fullfile(pth, '2D', sprintf('cv_adv_init%d_N%d.pdf', init_case, n_x));
+            if init_case == 1
+                plot_profile(mod(xcoord(cells) + ycoord(cells), 2*pi), u(cells), ...
+                    linspace(0, 2*pi, 2000), @(s) u_ref(s, 0), 'x + y', [0 2*pi], true, 'southwest', fname);
+            elseif any(init_case == [2,3,4])
+                xc = x0 + c*t_final; yc = y0 + c*t_final; sc = xc + yc;
+                dx_c = xcoord(cells) - xc; dy_c = ycoord(cells) - yc;
+                on_diag = abs(dx_c - dy_c)/sqrt(2) < h/2;
+                sf = linspace(sc - 8, sc + 8, 2000);
+                if init_case == 3, loc = 'northwest'; yl = [0 0.5]; else, loc = 'south'; yl = []; end
+                plot_profile(xcoord(cells(on_diag)) + ycoord(cells(on_diag)), u(cells(on_diag)), sf, ...
+                    @(s) u_ref(xc + (s - sc)/2, yc + (s - sc)/2), 'x + y', [sc - 8, sc + 8], false, loc, fname, yl);
+                if init_case == 4
+                    %Resolution study: all cell averages against the distance r
+                    %from the advected center
+                    r = sqrt(dx_c.^2 + dy_c.^2);
+                    plot_profile(r, u(cells), linspace(0, 2*pi, 2000), @(rr) u_initial(x0 + rr, y0), ...
+                        'r', [0 2*pi], false, 'southwest', ...
+                        fullfile(pth, '2D', sprintf('cv_adv_init4_radial_N%d.pdf', n_x)));
+                end
+            end
+        end
 
       
 
    
    end
    
-    format shorte
-    p = 3;
-    err_name = "L2";
-
-    fig_num = fig_num + 1;
-    T = order_table(DX,n_array, L2_Error_quadratic, err_name,fig_num,dom, pth, t_final, eps, approach, init_case); 
-    disp(T);
-    order_plot(L2_Error_quadratic, Method,p,DX,err_name, k, fig_num + 1);
-    
-   % saveas(fig_num , sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_table_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
-   % saveas(fig_num + 1, sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_plot_%s_init_%d.jpg',pth,t_final*2,eps,approach,init_case),'jpeg')
+    print_order_table(DX, n_array, dom, L1Error, "L1");
+    print_order_table(DX, n_array, dom, L2_Error_quadratic, "L2");
+    print_order_table(DX, n_array, dom, LinfError, "Linf");
 
 
 function [inner_v_vec_2,inner_v_vec,ind_vec,n_steps,inner_steps] = get_indexing_arrays(N_x,N_y)
@@ -860,8 +838,11 @@ end
 function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, nod_in_e2d,tri,xcoord,ycoord,area)
 
     
-        f1 = @(x,y) 1;    f2 = @(x,y) x;       f3 = @(x,y) y; 
-        f4 = @(x,y) x.*y; f5 = @(x,y) x.^2;    f6 = @(x,y) y.^2;
+        %Center the least squares on vertex i and scale by sqrt(area). Building
+        %the system in absolute coordinates makes A'A badly conditioned.
+        xc = xcoord(i); yc = ycoord(i); s = sqrt(area(i));
+        f1 = @(x,y) 1;    f2 = @(x,y) (x-xc)/s;       f3 = @(x,y) (y-yc)/s; 
+        f4 = @(x,y) ((x-xc)/s).*((y-yc)/s); f5 = @(x,y) ((x-xc)/s).^2; f6 = @(x,y) ((y-yc)/s).^2;
         
         %Build matrix for least squares
         A = zeros(m,k);
@@ -901,6 +882,12 @@ function W = cell_vertex_condensed_constrained_weight_matrix(k,m,i,nghbr_n2d, no
         F = P/mu;
 
         W = [E, F];
+
+        %Map coefficients of 1, z, w, zw, z^2, w^2 (z = (x-xc)/s, w = (y-yc)/s)
+        %back to coefficients of 1, x, y, xy, x^2, y^2, so the rest of the
+        %code is unchanged.
+        W = scaled_to_absolute_2d(xc,yc,s)*W;
+
 
 
     
@@ -1081,86 +1068,39 @@ end
 
 
 
- function order_plot(L2Error,Method,p,dx,err_name, k,fig_num)
-    figure(fig_num)
-    hold on;
-    plot(log10(dx),log10(L2Error),'.-','LineWidth',2,'MarkerSize',20)
-    plot(log10(dx),p*log10(dx),'k','LineWidth',3) %Reference Slope = 3
-    xlabel('Log_{10}(\Deltax)')
-    ylabel('Log_{10}(Error)')
-    title(sprintf("%s Convergence Plot using %s with K = %s", [err_name Method k]))
-    legend('', sprintf('p=%i', p),'location','southeast')
+function T = scaled_to_absolute_2d(xc,yc,s)
+    %Rows: coefficients of 1, x, y, xy, x^2, y^2. Columns: coefficients of
+    %1, z, w, zw, z^2, w^2 with z = (x-xc)/s and w = (y-yc)/s.
+    T = [1, -xc/s, -yc/s, xc*yc/s^2,  xc^2/s^2,  yc^2/s^2;
+         0,  1/s,   0,    -yc/s^2,   -2*xc/s^2,  0;
+         0,  0,     1/s,  -xc/s^2,    0,        -2*yc/s^2;
+         0,  0,     0,     1/s^2,     0,         0;
+         0,  0,     0,     0,         1/s^2,     0;
+         0,  0,     0,     0,         0,         1/s^2];
 end
 
-function T1 = order_table(dx,n_array, L2Error, err_name, fig_num, dom, pth, t_final, eps, approach, init_case)
-    
 
-     L2Order = (log10(L2Error(1:end-1))-log10(L2Error(2:end)))./(log10(dx(1:end-1))-log10(dx(2:end))) ;
- 
+function print_order_table(dx, n_array, dom, err, name)
+    %Errors and orders of accuracy, with dx written as dom*pi/n
+    order = [NaN; log(err(1:end-1)./err(2:end))./log(dx(1:end-1)./dx(2:end))];
+    lbl = arrayfun(@(n) sprintf('%d*pi/%d', dom, n), n_array(:), 'UniformOutput', false);
+    disp(table(lbl, err(:), order, 'VariableNames', {'dx', sprintf('%s error', name), sprintf('%s order', name)}))
+end
 
-%%%If want to save as latex tabular output (written with ChatGPT help)
-    % % Example: 4*pi/n instead of 1/n
-     fractions = arrayfun(@(n) sprintf('$%d\\pi/%d$', dom, n), n_array, 'UniformOutput', false);
-    % 
-    T1 = table(fractions', L2Error(:),[0;L2Order(:)], ...
-    'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
-
-    % Create filename string for .tex
-    tex_filename = sprintf('%s/2D/hexagon_multres_tFinal_%d__eps_%d_convergence_table_%s_init_%d.tex', ...
-                           pth, t_final*2, eps, approach, init_case);
-    
-    % Open file for writing
-    fid = fopen(tex_filename, 'w');
-    
-    % Begin LaTeX table
-    fprintf(fid, '\\begin{tabular}{c c c}\n');
-    fprintf(fid, '\\hline\n');
-    
-    % Column headers
-    fprintf(fid, '%s & %s & %s \\\\\n', T1.Properties.VariableNames{:});
-    fprintf(fid, '\\hline\n');
-    
-    % Rows
-    for i = 1:height(T1)
-        fprintf(fid, '%s & %.4e & %.4f \\\\\n', ...
-            T1.dx{i}, ...
-            T1.('L2 Error')(i), ...
-            T1.('L2 Order')(i));
+function plot_profile(s, us, sf, w_exact, xlab, xl, pi_ticks, loc, fname, yl)
+    %All cell averages against one coordinate s (x + y or r), with the exact
+    %profile as a red line and the cell averages as green symbols. No title;
+    %details go in the LaTeX caption.
+    fig = figure('Units','inches','Position',[1 1 5.5 4.0],'Color','w');
+    plot(sf, arrayfun(w_exact, sf), 'r-', 'LineWidth', 1.5); hold on
+    plot(s(:), us(:), 'o', 'Color', [0 0.5 0], 'MarkerSize', 3, 'LineWidth', 0.75);
+    xlim(xl);
+    if nargin > 9 && ~isempty(yl), ylim(yl); end
+    if pi_ticks
+        xticks(0:pi/2:2*pi); xticklabels({'0','\pi/2','\pi','3\pi/2','2\pi'});
     end
-    
-    % End table
-    fprintf(fid, '\\hline\n');
-    fprintf(fid, '\\end{tabular}\n');
-    
-    % Close file
-    fclose(fid);
-
-  %%%If want to save as figure: 
-    % %Format basic table
-    % fractions = arrayfun(@(x) sprintf('1/%d', x), n_array, 'UniformOutput', false);
-    % 
-    % T1 = table(fractions', L2Error(:),[0;L2Order(:)], ...
-    %     'VariableNames',{'dx',sprintf('%s Error', err_name),sprintf('%s Order', err_name),});
-    % 
-    % 
-    % % Format numeric data as strings
-    % formattedData = [ ...
-    %     T1.dx, ...
-    %     cellstr(num2str(T1.('L2 Error'), '%.4e')), ...
-    %     cellstr(num2str(T1.('L2 Order'), '%.4f')) ...
-    % ];
-    % 
-    % % Create figure and uitable
-    % % Create a specific figure number (e.g., 5)
-    % f = figure(fig_num);  % This ensures the figure number is exactly 5
-    % clf(f);         % Clear it in case it already exists
-    % set(f, 'Position', [100 100 600 150], 'Color', 'w');
-    % 
-    % T = uitable(f, ...
-    %     'Data', formattedData, ...
-    %     'ColumnName', T1.Properties.VariableNames, ...
-    %     'RowName', [], ...
-    %     'Units', 'Normalized', ...
-    %     'Position', [0 0 1 1], ...
-    %     'FontSize', 12);
+    xlabel(xlab); ylabel('u');
+    legend({'Exact','Multi-resolution WENO'}, 'Location', loc, 'Box', 'off');
+    set(gca, 'FontSize', 13, 'LineWidth', 1, 'TickDir', 'out', 'Box', 'on');
+    exportgraphics(fig, fname, 'ContentType', 'vector');
 end
